@@ -211,6 +211,7 @@
         .row-replaced td { background: #fef3c7 !important; }
         .row-replaced:hover td { background: #fde68a !important; }
         .badge-replaced { background: #fde68a; color: #92400e; }
+        .repl-arrow { color: #94a3b8; font-size: 18px; margin: 0 4px; }
         .btn-icon { background: none; border: none; cursor: pointer; color: #64748b; font-size: 16px; transition: color 0.2s; }
         .btn-icon:hover { color: #3b82f6; }
         .text-muted { color: #94a3b8; }
@@ -291,6 +292,7 @@
 
     <div class="tabs">
         <button class="tab active" data-tab="objects"><i class="fas fa-list-ul"></i> Объекты из XML</button>
+        <button class="tab" data-tab="replacements"><i class="fas fa-exchange-alt"></i> Замены GUID</button>
         <button class="tab" data-tab="guid_db"><i class="fas fa-database"></i> База GUID (1С)</button>
     </div>
 
@@ -341,6 +343,35 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="tab-replacements" class="tab-pane">
+        <div class="result-area">
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search" style="color:#94a3b8;"></i>
+                    <input type="text" id="replSearchInput" placeholder="Поиск по типу, описанию, GUID...">
+                </div>
+                <div class="actions">
+                    <button id="clearReplSearchBtn" class="btn btn-outline"><i class="fas fa-times"></i> Сброс</button>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr>
+                        <th style="min-width:140px;">Тип</th>
+                        <th>Описание</th>
+                        <th style="min-width:240px;">Старый GUID</th>
+                        <th style="min-width:240px;">Новый GUID</th>
+                        <th style="width:90px;">Группа</th>
+                    </tr></thead>
+                    <tbody id="replBody">
+                        <tr><td colspan="5" style="text-align:center; padding:30px; color:#94a3b8;">Замены пока не выполнялись. Используйте «Автозамена» на вкладке «Объекты из XML».</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="replCount" style="margin-top:12px; font-size:13px; color:#64748b;">0 замен</div>
         </div>
     </div>
 
@@ -406,6 +437,7 @@
     let objPage = 1;
     let objPerPage = 100;
     let replacedGuids = new Set(); // GUID, которые были заменены
+    let replacementLog = []; // {type, description, oldGuid, newGuid, isFolder}
 
     // ---- DOM элементы ----
     const statusDiv = document.getElementById('status');
@@ -621,7 +653,7 @@
             const typeBadge = `<span class="badge ${typeClass}">${typeStr}</span>`;
             let folderBadge = '';
             if (obj.IsFolder !== undefined) {
-                folderBadge = obj.IsFolder ? '<span class="badge badge-folder">Да</span>' : '<span class="badge badge-secondary">Нет</span>';
+                folderBadge = obj.IsFolder ? '<span class="badge badge-success">Да</span>' : '<span class="badge badge-secondary">Нет</span>';
             }
             const isReplaced = replacedGuids.has(obj.Ref);
             if (isReplaced) tr.classList.add('row-replaced');
@@ -657,6 +689,13 @@
                         alert('Неверный формат GUID. Ожидается: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx');
                         return;
                     }
+                    replacementLog.push({
+                        type: obj._type || '',
+                        description: obj.Description || '',
+                        oldGuid: oldGuid,
+                        newGuid: newGuid,
+                        isFolder: obj.IsFolder || false
+                    });
                     obj.Ref = newGuid;
                     replacedGuids.add(newGuid);
                     renderTable(currentObjects);
@@ -747,7 +786,28 @@
             const stats = data.stats || {};
             // Запоминаем новые GUID, которые были заменены
             if (data.replacements) {
-                Object.values(data.replacements).forEach(g => replacedGuids.add(g));
+                // Собираем детали замен для вкладки "Замены GUID"
+                const oldObjectsMap = {};
+                // currentObjects уже обновлён, но replacements содержит old→new
+                // Сопоставляем по новому GUID (т.к. currentObjects уже содержит новые)
+                const reverseMap = {};
+                Object.entries(data.replacements).forEach(([oldG, newG]) => {
+                    reverseMap[newG] = oldG;
+                    replacedGuids.add(newG);
+                });
+                currentObjects.forEach(obj => {
+                    const newG = obj.Ref;
+                    const oldG = reverseMap[newG];
+                    if (oldG) {
+                        replacementLog.push({
+                            type: obj._type || '',
+                            description: obj.Description || '',
+                            oldGuid: oldG,
+                            newGuid: newG,
+                            isFolder: obj.IsFolder || false
+                        });
+                    }
+                });
             }
             const msg = `✅ Автозамена: заменено ${replaced}, не найдено в БД ${stats.not_found || 0}, уже совпадало ${stats.already_matched || 0}, без описания ${stats.no_description || 0}`;
             if (replaced > 0) {
@@ -766,6 +826,53 @@
         });
     });
 
+    // ---- Таблица замен GUID ----
+    function renderReplTable(items) {
+        const tbody = document.getElementById('replBody');
+        const countEl = document.getElementById('replCount');
+        if (!items || items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#94a3b8;">Замены пока не выполнялись. Используйте «Автозамена» на вкладке «Объекты из XML».</td></tr>';
+            countEl.textContent = '0 замен';
+            return;
+        }
+        tbody.innerHTML = '';
+        items.forEach(item => {
+            const tr = document.createElement('tr');
+            const typeClass = getTypeClass(item.type);
+            const typeBadge = `<span class="badge ${typeClass}">${item.type}</span>`;
+            const folderBadge = item.isFolder ? '<span class="badge badge-success">Да</span>' : '<span class="badge badge-secondary">Нет</span>';
+            tr.innerHTML = `
+                <td>${typeBadge}</td>
+                <td>${item.description}</td>
+                <td><code class="badge-guid" style="background:#fee2e2; color:#b91c1c;" title="${item.oldGuid}">${item.oldGuid}</code></td>
+                <td><code class="badge-guid" style="background:#dcfce7; color:#166534;" title="${item.newGuid}">${item.newGuid}</code></td>
+                <td>${folderBadge}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+        countEl.textContent = `${items.length} замен`;
+    }
+
+    let replSearchTimer = null;
+    document.getElementById('replSearchInput').addEventListener('input', function() {
+        clearTimeout(replSearchTimer);
+        replSearchTimer = setTimeout(function() {
+            const query = document.getElementById('replSearchInput').value.toLowerCase().trim();
+            if (!query) { renderReplTable(replacementLog); return; }
+            const filtered = replacementLog.filter(item =>
+                (item.type && item.type.toLowerCase().includes(query)) ||
+                (item.description && item.description.toLowerCase().includes(query)) ||
+                (item.oldGuid && item.oldGuid.toLowerCase().includes(query)) ||
+                (item.newGuid && item.newGuid.toLowerCase().includes(query))
+            );
+            renderReplTable(filtered);
+        }, 300);
+    });
+    document.getElementById('clearReplSearchBtn').addEventListener('click', function() {
+        document.getElementById('replSearchInput').value = '';
+        renderReplTable(replacementLog);
+    });
+
     // ---- Вкладки ----
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', function() {
@@ -777,6 +884,8 @@
             if (tabId === 'guid_db') {
                 loadGuidTypes();
                 loadGuidData();
+            } else if (tabId === 'replacements') {
+                renderReplTable(replacementLog);
             }
         });
     });
