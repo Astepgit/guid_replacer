@@ -58,14 +58,14 @@
         .tab-pane.active { display: block; }
         .upload-card {
             background: white;
-            border-radius: 16px;
-            padding: 30px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            margin-bottom: 30px;
+            border-radius: 12px;
+            padding: 14px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            margin-bottom: 20px;
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 20px;
+            gap: 14px;
         }
         .upload-card .file-area {
             display: flex;
@@ -89,16 +89,21 @@
             border: 2px dashed #3b82f6;
         }
         .btn {
-            padding: 10px 20px;
+            padding: 8px 16px;
             border: none;
             border-radius: 8px;
             font-weight: 600;
+            font-size: 14px;
+            font-family: inherit;
             cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
+            transition: background 0.2s, transform 0.1s, opacity 0.2s;
             display: inline-flex;
             align-items: center;
             gap: 8px;
+            white-space: nowrap;
+            line-height: 1.4;
         }
+        .btn:disabled { opacity: 0.55; cursor: not-allowed; }
         .btn-primary { background: #3b82f6; color: white; }
         .btn-primary:hover { background: #2563eb; }
         .btn-success { background: #22c55e; color: white; }
@@ -107,7 +112,6 @@
         .btn-danger:hover { background: #dc2626; }
         .btn-outline { background: transparent; border: 1px solid #cbd5e1; color: #1e293b; }
         .btn-outline:hover { background: #f1f5f9; }
-        .btn-sm { padding: 6px 12px; font-size: 13px; }
         .btn-warning { background: #f59e0b; color: white; }
         .btn-warning:hover { background: #d97706; }
         .btn-purple { background: #8b5cf6; color: white; }
@@ -204,6 +208,9 @@
         .badge-guid { font-family: monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
         .badge-success { background: #dcfce7; color: #166534; }
         .badge-secondary { background: #f1f5f9; color: #475569; }
+        .row-replaced td { background: #fef3c7 !important; }
+        .row-replaced:hover td { background: #fde68a !important; }
+        .badge-replaced { background: #fde68a; color: #92400e; }
         .btn-icon { background: none; border: none; cursor: pointer; color: #64748b; font-size: 16px; transition: color 0.2s; }
         .btn-icon:hover { color: #3b82f6; }
         .text-muted { color: #94a3b8; }
@@ -272,9 +279,9 @@
 
     <div class="upload-card" id="uploadCard">
         <div class="file-area">
-            <i class="fas fa-cloud-upload-alt fa-2x" style="color:#3b82f6;"></i>
+            <i class="fas fa-cloud-upload-alt fa-lg" style="color:#3b82f6;"></i>
             <input type="file" id="fileInput" accept=".xml" style="display:none;">
-            <button id="fileBrowseBtn" class="btn btn-outline btn-sm" style="margin:0;"><i class="fas fa-folder-open"></i> Выбрать файл</button>
+            <button id="fileBrowseBtn" class="btn btn-outline" style="margin:0;"><i class="fas fa-folder-open"></i> Выбрать файл</button>
             <span id="fileNameLabel" class="text-muted" style="font-size:14px;">Файл не выбран</span>
         </div>
         <button id="uploadBtn" class="btn btn-primary"><i class="fas fa-upload"></i> Загрузить</button>
@@ -296,9 +303,9 @@
                         <input type="text" id="searchInput" placeholder="Поиск по GUID, описанию, коду, типу...">
                     </div>
                     <div class="actions">
-                        <button id="autoReplaceBtn" class="btn btn-purple btn-sm"><i class="fas fa-magic"></i> Автозамена</button>
-                        <button id="clearSearchBtn" class="btn btn-outline btn-sm"><i class="fas fa-times"></i> Сброс</button>
-                        <button id="downloadBtn" class="btn btn-success btn-sm"><i class="fas fa-download"></i> Скачать XML</button>
+                        <button id="autoReplaceBtn" class="btn btn-purple"><i class="fas fa-magic"></i> Автозамена</button>
+                        <button id="clearSearchBtn" class="btn btn-outline"><i class="fas fa-times"></i> Сброс</button>
+                        <button id="downloadBtn" class="btn btn-success"><i class="fas fa-download"></i> Скачать XML</button>
                     </div>
                 </div>
                 <div class="table-wrapper">
@@ -309,7 +316,7 @@
                                 <th>GUID</th>
                                 <th>Описание</th>
                                 <th>Код</th>
-                                <th>Папка</th>
+                                <th>Группа</th>
                                 <th>Родитель</th>
                                 <th>Владелец</th>
                                 <th style="width:100px;">Действия</th>
@@ -321,9 +328,9 @@
                 <div class="pagination-bar" id="objectsPagination" style="display:none; margin-top:12px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
                     <div style="font-size:13px; color:#64748b;" id="objectCount">0 объектов</div>
                     <div style="display:flex; align-items:center; gap:6px;">
-                        <button class="btn btn-outline btn-sm page-btn" id="objPagePrev" disabled><i class="fas fa-chevron-left"></i> Назад</button>
+                        <button class="btn btn-outline page-btn" id="objPagePrev" disabled><i class="fas fa-chevron-left"></i> Назад</button>
                         <span style="font-size:13px; color:#1e293b; font-weight:600; padding:0 8px;" id="objPageInfo">1 / 1</span>
-                        <button class="btn btn-outline btn-sm page-btn" id="objPageNext" disabled>Вперед <i class="fas fa-chevron-right"></i></button>
+                        <button class="btn btn-outline page-btn" id="objPageNext" disabled>Вперед <i class="fas fa-chevron-right"></i></button>
                         <span style="font-size:13px; color:#94a3b8; margin-left:8px;">на странице</span>
                         <select id="objPerPageSelect" style="padding:4px 8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
                             <option value="50">50</option>
@@ -346,16 +353,18 @@
                     <select id="guidTypeFilter"><option value="">Все типы</option></select>
                 </div>
                 <div class="actions">
-                    <button id="syncDbBtn" class="btn btn-warning btn-sm"><i class="fas fa-sync"></i> Синхронизировать</button>
-                    <button id="refreshGuidBtn" class="btn btn-primary btn-sm"><i class="fas fa-refresh"></i> Обновить</button>
+                    <button id="syncDbBtn" class="btn btn-warning"><i class="fas fa-sync"></i> Синхронизировать</button>
+                    <button id="refreshGuidBtn" class="btn btn-primary"><i class="fas fa-refresh"></i> Обновить</button>
                 </div>
             </div>
-            <div class="sync-info" id="syncInfo" style="display:none; margin-bottom:8px; font-size:14px; color:#475569;">
-                <i class="fas fa-spinner fa-spin" style="color:#3b82f6;"></i>
-                <span id="syncInfoText">Синхронизация запущена...</span>
-            </div>
-            <div class="progress-container" id="progressContainer">
-                <div class="progress-bar" id="progressBar" style="width:0%">0%</div>
+            <div class="sync-info" id="syncInfo" style="display:none; margin-bottom:8px;">
+                <div style="display:flex; align-items:center; gap:8px; font-size:14px; color:#475569;">
+                    <i class="fas fa-spinner fa-spin" style="color:#3b82f6;"></i>
+                    <span id="syncInfoText">Синхронизация запущена...</span>
+                </div>
+                <div class="progress-container active" id="progressContainer" style="margin-top:6px; margin-bottom:0;">
+                    <div class="progress-bar" id="progressBar" style="width:0%">0%</div>
+                </div>
             </div>
             <div class="table-wrapper">
                 <table>
@@ -366,9 +375,9 @@
             <div class="pagination-bar" id="guidPagination" style="display:none; margin-top:12px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
                 <div style="font-size:13px; color:#64748b;" id="guidCount">0 записей</div>
                 <div style="display:flex; align-items:center; gap:6px;">
-                    <button class="btn btn-outline btn-sm page-btn" id="pagePrev" disabled><i class="fas fa-chevron-left"></i> Назад</button>
+                    <button class="btn btn-outline page-btn" id="pagePrev" disabled><i class="fas fa-chevron-left"></i> Назад</button>
                     <span style="font-size:13px; color:#1e293b; font-weight:600; padding:0 8px;" id="pageInfo">1 / 1</span>
-                    <button class="btn btn-outline btn-sm page-btn" id="pageNext" disabled>Вперед <i class="fas fa-chevron-right"></i></button>
+                    <button class="btn btn-outline page-btn" id="pageNext" disabled>Вперед <i class="fas fa-chevron-right"></i></button>
                     <span style="font-size:13px; color:#94a3b8; margin-left:8px;">на странице</span>
                     <select id="perPageSelect" style="padding:4px 8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
                         <option value="50">50</option>
@@ -396,6 +405,7 @@
     let guidPages = 0;
     let objPage = 1;
     let objPerPage = 100;
+    let replacedGuids = new Set(); // GUID, которые были заменены
 
     // ---- DOM элементы ----
     const statusDiv = document.getElementById('status');
@@ -425,6 +435,7 @@
         statusDiv.style.display = 'none';
     }
     function setProgress(percent, text) {
+        syncInfo.style.display = 'block';
         progressContainer.classList.add('active');
         progressBar.style.width = percent + '%';
         progressBar.textContent = percent + '%';
@@ -610,12 +621,17 @@
             const typeBadge = `<span class="badge ${typeClass}">${typeStr}</span>`;
             let folderBadge = '';
             if (obj.IsFolder !== undefined) {
-                folderBadge = obj.IsFolder ? '<span class="badge badge-folder"><i class="fas fa-folder"></i> Да</span>' : '<span class="text-muted">Нет</span>';
+                folderBadge = obj.IsFolder ? '<span class="badge badge-folder">Да</span>' : '<span class="badge badge-secondary">Нет</span>';
             }
+            const isReplaced = replacedGuids.has(obj.Ref);
+            if (isReplaced) tr.classList.add('row-replaced');
+            const guidBadge = isReplaced
+                ? `<code class="badge-guid badge-replaced" title="GUID заменён: ${obj.Ref}">${obj.Ref || ''}</code>`
+                : `<code class="badge-guid" title="${obj.Ref || ''}">${obj.Ref || ''}</code>`;
             const actions = `<button class="btn-icon replace-btn" data-index="${globalIndex}" title="Заменить GUID"><i class="fas fa-edit"></i></button>`;
             tr.innerHTML = `
                 <td>${typeBadge}</td>
-                <td><code class="badge-guid" title="${obj.Ref || ''}">${obj.Ref || ''}</code></td>
+                <td>${guidBadge}</td>
                 <td>${obj.Description || ''}</td>
                 <td>${obj.Code || ''}</td>
                 <td>${folderBadge}</td>
@@ -642,6 +658,7 @@
                         return;
                     }
                     obj.Ref = newGuid;
+                    replacedGuids.add(newGuid);
                     renderTable(currentObjects);
                     showStatus('🔄 GUID заменён в памяти. Для сохранения нажмите "Скачать XML".', 'info');
                 }
@@ -728,6 +745,10 @@
             currentObjects = data.objects || [];
             const replaced = data.total_replaced || 0;
             const stats = data.stats || {};
+            // Запоминаем новые GUID, которые были заменены
+            if (data.replacements) {
+                Object.values(data.replacements).forEach(g => replacedGuids.add(g));
+            }
             const msg = `✅ Автозамена: заменено ${replaced}, не найдено в БД ${stats.not_found || 0}, уже совпадало ${stats.already_matched || 0}, без описания ${stats.no_description || 0}`;
             if (replaced > 0) {
                 showStatus(msg, 'success');
@@ -830,7 +851,7 @@
             const typeClass = getTypeClass(row.type);
             const typeBadge = `<span class="badge ${typeClass}">${row.type || ''}</span>`;
             const copyBtn = `<button class="btn-icon copy-guid-btn" data-guid="${row.guid}" title="Скопировать GUID"><i class="fas fa-copy"></i></button>`;
-            const folderBadge = row.is_folder ? '<span class="badge badge-success">Группа</span>' : '<span class="badge badge-secondary">Элемент</span>';
+            const folderBadge = row.is_folder ? '<span class="badge badge-success">Да</span>' : '<span class="badge badge-secondary">Нет</span>';
             tr.innerHTML = `
                 <td>${typeBadge}</td>
                 <td>${row.name || ''}</td>

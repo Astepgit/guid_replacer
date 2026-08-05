@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import time
 import logging
+import logging.handlers
 import uuid
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -19,12 +20,31 @@ load_dotenv()
 
 # Настройка логирования
 log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
-logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+log_file = os.environ.get('LOG_FILE', 'app.log')
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 100 * 1024 * 1024))
+
+# Настраиваем логирование после создания Flask-приложения
+_file_handler = logging.handlers.RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
+_stream_handler = logging.StreamHandler()
+_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+_file_handler.setFormatter(_formatter)
+_stream_handler.setFormatter(_formatter)
+
+# Настраиваем root-логгер — Flask/werkzeug используют его
+_root_logger = logging.getLogger()
+_root_logger.setLevel(log_level)
+_root_logger.addHandler(_file_handler)
+_root_logger.addHandler(_stream_handler)
+
+# Также настраиваем app.logger напрямую
+app.logger.setLevel(log_level)
+app.logger.addHandler(_file_handler)
+app.logger.addHandler(_stream_handler)
+
+logger = logging.getLogger(__name__)
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 

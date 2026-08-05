@@ -15,3 +15,5 @@ uploads/
 
 # Тестовые файлы
 for_upload-*.xml
+*.env.old
+.env*
