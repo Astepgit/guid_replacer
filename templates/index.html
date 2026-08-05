@@ -566,7 +566,7 @@
         setProgress(0, 'Подготовка...');
         syncInfo.style.display = 'block';
         syncInfoText.textContent = 'Синхронизация запущена...';
-        showStatus('<i class="fas fa-spinner fa-spin"></i> Синхронизация запущена...', 'info');
+        hideStatus();
         syncTotalTypes = 0;
         syncDone = false;
 
@@ -586,25 +586,20 @@
                     const total = syncTotalTypes || 28;
                     const percent = Math.min(Math.round((processed / total) * 100), 95);
                     setProgress(percent, data.table || 'Обработка...');
-                } else if (data.type === 'result') {
-                    if (data.message.includes('Сохранено')) {
-                        showStatus('✅ ' + data.message, 'success');
-                    }
                 } else if (data.type === 'done') {
                     syncDone = true;
                     setProgress(100, 'Готово!');
                     syncInfoText.textContent = 'Синхронизация завершена';
-                    showStatus('✅ ' + data.message, 'success');
                     eventSource.close();
                     eventSource = null;
                     loadGuidData();
                     loadGuidTypes();
                     setTimeout(hideProgress, 3000);
                 } else if (data.type === 'error') {
-                    showStatus('❌ ' + data.message, 'error');
+                    syncInfoText.innerHTML = '<span style="color:#b91c1c;">Ошибка: ' + data.message + '</span>';
                     eventSource.close();
                     eventSource = null;
-                    hideProgress();
+                    setTimeout(hideProgress, 5000);
                 }
             } catch (err) {
                 console.error('Ошибка парсинга SSE:', err);
@@ -619,8 +614,8 @@
                 eventSource.close();
                 eventSource = null;
             }
-            hideProgress();
-            showStatus('❌ Ошибка соединения при синхронизации', 'error');
+            syncInfoText.innerHTML = '<span style="color:#b91c1c;">Ошибка соединения при синхронизации</span>';
+            setTimeout(hideProgress, 5000);
         };
     }
 
