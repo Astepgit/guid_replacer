@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Замена GUID в XML 1С</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f5f7fa;
+            margin: 0;
+            padding: 20px;
+            color: #1e293b;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 {
+            font-weight: 700;
+            font-size: 28px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h1 i { color: #3b82f6; }
+        .subtitle { color: #64748b; margin-top: -5px; margin-bottom: 25px; }
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 12px 24px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.2s;
+            background: transparent;
+            color: #64748b;
+            border: none;
+            font-family: inherit;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tab:hover { background: #f1f5f9; color: #1e293b; }
+        .tab.active {
+            background: white;
+            color: #3b82f6;
+            border-bottom: 3px solid #3b82f6;
+            box-shadow: 0 -2px 4px rgba(0,0,0,0.02);
+        }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+        .upload-card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 20px;
+        }
+        .upload-card .file-area {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex: 1;
+        }
+        .upload-card input[type="file"] {
+            padding: 10px;
+            border: 2px dashed #cbd5e1;
+            border-radius: 8px;
+            background: #f8fafc;
+            flex: 1;
+            cursor: pointer;
+        }
+        .upload-card input[type="file"]:hover {
+            border-color: #3b82f6;
+        }
+        .upload-card.dragover {
+            background: #eff6ff;
+            border: 2px dashed #3b82f6;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-success { background: #22c55e; color: white; }
+        .btn-success:hover { background: #16a34a; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-outline { background: transparent; border: 1px solid #cbd5e1; color: #1e293b; }
+        .btn-outline:hover { background: #f1f5f9; }
+        .btn-sm { padding: 6px 12px; font-size: 13px; }
+        .btn-warning { background: #f59e0b; color: white; }
+        .btn-warning:hover { background: #d97706; }
+        .btn-purple { background: #8b5cf6; color: white; }
+        .btn-purple:hover { background: #7c3aed; }
+        .status {
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+        }
+        .status.info { background: #e0f2fe; color: #0369a1; display: flex; }
+        .status.error { background: #fee2e2; color: #b91c1c; display: flex; }
+        .status.success { background: #dcfce7; color: #15803d; display: flex; }
+        .result-area {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            padding: 20px;
+            margin-top: 10px;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            gap: 15px;
+        }
+        .toolbar .search-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            max-width: 500px;
+        }
+        .toolbar .search-box input,
+        .toolbar .search-box select {
+            padding: 8px 14px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            width: 100%;
+            font-size: 14px;
+            transition: border 0.2s;
+        }
+        .toolbar .search-box select { max-width: 200px; }
+        .toolbar .search-box input:focus,
+        .toolbar .search-box select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
+        }
+        .toolbar .actions { display: flex; gap: 10px; }
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th {
+            background: #f1f5f9;
+            text-align: left;
+            padding: 12px 14px;
+            font-weight: 600;
+            color: #475569;
+            border-bottom: 2px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+        td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: middle;
+        }
+        tr:hover td { background: #f8fafc; }
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+        .badge-folder { background: #fef9c3; color: #854d0e; }
+        .badge-guid { font-family: monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
+        .badge-success { background: #dcfce7; color: #166534; }
+        .badge-secondary { background: #f1f5f9; color: #475569; }
+        .btn-icon { background: none; border: none; cursor: pointer; color: #64748b; font-size: 16px; transition: color 0.2s; }
+        .btn-icon:hover { color: #3b82f6; }
+        .text-muted { color: #94a3b8; }
+        .type-catalog { background: #dbeafe; color: #1e40af; }
+        .type-document { background: #fce7f3; color: #9d174d; }
+        .type-chart { background: #d1fae5; color: #065f46; }
+        .type-other { background: #f1f5f9; color: #475569; }
+        .progress-container {
+            margin: 0 0 10px 0;
+            background: #f1f5f9;
+            border-radius: 8px;
+            overflow: hidden;
+            height: 24px;
+            display: none;
+            align-items: center;
+            position: relative;
+        }
+        .progress-container.active { display: flex; }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            transition: width 0.3s;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            min-width: 40px;
+        }
+        .progress-text {
+            display: none;
+        }
+        .sync-status {
+            display: none;
+        }
+        .table-wrapper table td code.badge-guid {
+            max-width: 240px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .table-wrapper table td {
+            max-width: 300px;
+            word-break: break-word;
+        }
+        .pagination-bar .page-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        @media (max-width: 700px) {
+            .upload-card { flex-direction: column; align-items: stretch; }
+            .toolbar { flex-direction: column; align-items: stretch; }
+            .toolbar .search-box { max-width: 100%; }
+            .toolbar .search-box select { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1><i class="fas fa-exchange-alt"></i> Замена GUID в XML 1С</h1>
+    <p class="subtitle">Загрузите файл выгрузки, просмотрите объекты и замените идентификаторы</p>
+
+    <div class="upload-card" id="uploadCard">
+        <div class="file-area">
+            <i class="fas fa-cloud-upload-alt fa-2x" style="color:#3b82f6;"></i>
+            <input type="file" id="fileInput" accept=".xml" style="display:none;">
+            <button id="fileBrowseBtn" class="btn btn-outline btn-sm" style="margin:0;"><i class="fas fa-folder-open"></i> Выбрать файл</button>
+            <span id="fileNameLabel" class="text-muted" style="font-size:14px;">Файл не выбран</span>
+        </div>
+        <button id="uploadBtn" class="btn btn-primary"><i class="fas fa-upload"></i> Загрузить</button>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="tabs">
+        <button class="tab active" data-tab="objects"><i class="fas fa-list-ul"></i> Объекты из XML</button>
+        <button class="tab" data-tab="guid_db"><i class="fas fa-database"></i> База GUID (1С)</button>
+    </div>
+
+    <div id="tab-objects" class="tab-pane active">
+        <div id="resultArea" style="display: none;">
+            <div class="result-area">
+                <div class="toolbar">
+                    <div class="search-box">
+                        <i class="fas fa-search" style="color:#94a3b8;"></i>
+                        <input type="text" id="searchInput" placeholder="Поиск по GUID, описанию, коду, типу...">
+                    </div>
+                    <div class="actions">
+                        <button id="autoReplaceBtn" class="btn btn-purple btn-sm"><i class="fas fa-magic"></i> Автозамена</button>
+                        <button id="clearSearchBtn" class="btn btn-outline btn-sm"><i class="fas fa-times"></i> Сброс</button>
+                        <button id="downloadBtn" class="btn btn-success btn-sm"><i class="fas fa-download"></i> Скачать XML</button>
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table id="objectsTable">
+                        <thead>
+                            <tr>
+                                <th>Тип</th>
+                                <th>GUID</th>
+                                <th>Описание</th>
+                                <th>Код</th>
+                                <th>Папка</th>
+                                <th>Родитель</th>
+                                <th>Владелец</th>
+                                <th style="width:100px;">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="objectsBody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination-bar" id="objectsPagination" style="display:none; margin-top:12px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                    <div style="font-size:13px; color:#64748b;" id="objectCount">0 объектов</div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <button class="btn btn-outline btn-sm page-btn" id="objPagePrev" disabled><i class="fas fa-chevron-left"></i> Назад</button>
+                        <span style="font-size:13px; color:#1e293b; font-weight:600; padding:0 8px;" id="objPageInfo">1 / 1</span>
+                        <button class="btn btn-outline btn-sm page-btn" id="objPageNext" disabled>Вперед <i class="fas fa-chevron-right"></i></button>
+                        <span style="font-size:13px; color:#94a3b8; margin-left:8px;">на странице</span>
+                        <select id="objPerPageSelect" style="padding:4px 8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+                            <option value="50">50</option>
+                            <option value="100" selected>100</option>
+                            <option value="200">200</option>
+                            <option value="500">500</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-guid_db" class="tab-pane">
+        <div class="result-area">
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search" style="color:#94a3b8;"></i>
+                    <input type="text" id="guidSearchInput" placeholder="Поиск по наименованию, GUID...">
+                    <select id="guidTypeFilter"><option value="">Все типы</option></select>
+                </div>
+                <div class="actions">
+                    <button id="syncDbBtn" class="btn btn-warning btn-sm"><i class="fas fa-sync"></i> Синхронизировать</button>
+                    <button id="refreshGuidBtn" class="btn btn-primary btn-sm"><i class="fas fa-refresh"></i> Обновить</button>
+                </div>
+            </div>
+            <div class="sync-info" id="syncInfo" style="display:none; margin-bottom:8px; font-size:14px; color:#475569;">
+                <i class="fas fa-spinner fa-spin" style="color:#3b82f6;"></i>
+                <span id="syncInfoText">Синхронизация запущена...</span>
+            </div>
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar" id="progressBar" style="width:0%">0%</div>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th style="min-width:140px;">Тип</th><th>Наименование</th><th style="min-width:240px;">GUID</th><th style="width:90px;">Группа</th><th style="width:90px;">Действия</th></tr></thead>
+                    <tbody id="guidBody"><tr><td colspan="5" style="text-align:center; padding:30px; color:#94a3b8;"><i class="fas fa-spinner fa-spin"></i> Загрузка данных...</td></tr></tbody>
+                </table>
+            </div>
+            <div class="pagination-bar" id="guidPagination" style="display:none; margin-top:12px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                <div style="font-size:13px; color:#64748b;" id="guidCount">0 записей</div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <button class="btn btn-outline btn-sm page-btn" id="pagePrev" disabled><i class="fas fa-chevron-left"></i> Назад</button>
+                    <span style="font-size:13px; color:#1e293b; font-weight:600; padding:0 8px;" id="pageInfo">1 / 1</span>
+                    <button class="btn btn-outline btn-sm page-btn" id="pageNext" disabled>Вперед <i class="fas fa-chevron-right"></i></button>
+                    <span style="font-size:13px; color:#94a3b8; margin-left:8px;">на странице</span>
+                    <select id="perPageSelect" style="padding:4px 8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+                        <option value="50">50</option>
+                        <option value="100" selected>100</option>
+                        <option value="200">200</option>
+                        <option value="500">500</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ---- Глобальные переменные ----
+    let currentObjects = [];
+    let currentFilename = '';
+    let sessionId = '';
+    let guidData = [];
+    let guidTypes = [];
+    let eventSource = null;
+    let guidPage = 1;
+    let guidPerPage = 100;
+    let guidTotal = 0;
+    let guidPages = 0;
+    let objPage = 1;
+    let objPerPage = 100;
+
+    // ---- DOM элементы ----
+    const statusDiv = document.getElementById('status');
+    const fileInput = document.getElementById('fileInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const resultArea = document.getElementById('resultArea');
+    const objectsBody = document.getElementById('objectsBody');
+    const objectCount = document.getElementById('objectCount');
+    const searchInput = document.getElementById('searchInput');
+    const clearSearchBtn = document.getElementById('clearSearchBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const autoReplaceBtn = document.getElementById('autoReplaceBtn');
+    const syncDbBtn = document.getElementById('syncDbBtn');
+    const refreshGuidBtn = document.getElementById('refreshGuidBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const syncInfo = document.getElementById('syncInfo');
+    const syncInfoText = document.getElementById('syncInfoText');
+
+    // ---- Вспомогательные функции ----
+    function showStatus(message, type = 'info') {
+        statusDiv.className = 'status ' + type;
+        statusDiv.innerHTML = message;
+        statusDiv.style.display = 'flex';
+    }
+    function hideStatus() {
+        statusDiv.style.display = 'none';
+    }
+    function setProgress(percent, text) {
+        progressContainer.classList.add('active');
+        progressBar.style.width = percent + '%';
+        progressBar.textContent = percent + '%';
+    }
+    function hideProgress() {
+        progressContainer.classList.remove('active');
+        syncInfo.style.display = 'none';
+    }
+
+    // ---- Обработчик загрузки файла ----
+    const uploadCard = document.getElementById('uploadCard');
+    const fileBrowseBtn = document.getElementById('fileBrowseBtn');
+    const fileNameLabel = document.getElementById('fileNameLabel');
+
+    fileBrowseBtn.addEventListener('click', function() {
+        fileInput.click();
+    });
+    fileInput.addEventListener('change', function() {
+        const file = fileInput.files[0];
+        fileNameLabel.textContent = file ? file.name : 'Файл не выбран';
+        fileNameLabel.classList.toggle('text-muted', !file);
+    });
+
+    uploadCard.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        uploadCard.classList.add('dragover');
+    });
+    uploadCard.addEventListener('dragleave', function(e) {
+        uploadCard.classList.remove('dragover');
+    });
+    uploadCard.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadCard.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            fileNameLabel.textContent = files[0].name;
+            fileNameLabel.classList.remove('text-muted');
+            uploadBtn.click();
+        }
+    });
+
+    function uploadFile(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        showStatus('<i class="fas fa-spinner fa-spin"></i> Загрузка и парсинг...', 'info');
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+        fetch('/upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                showStatus('Ошибка: ' + data.error, 'error');
+                return;
+            }
+            currentObjects = data.objects || [];
+            currentFilename = data.filename || '';
+            sessionId = data.session_id || '';
+            objPage = 1;
+            showStatus('✅ Найдено объектов: ' + currentObjects.length, 'success');
+            renderTable(currentObjects);
+            resultArea.style.display = 'block';
+        })
+        .catch(error => {
+            showStatus('❌ Ошибка загрузки: ' + error.message, 'error');
+        })
+        .finally(() => {
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Загрузить';
+        });
+    }
+
+    uploadBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const file = fileInput.files[0];
+        if (!file) {
+            showStatus('Пожалуйста, выберите XML-файл.', 'error');
+            return;
+        }
+        uploadFile(file);
+    });
+
+    // ---- Потоковая синхронизация ----
+    let syncTotalTypes = 0;
+    let syncDone = false;
+
+    function startSync() {
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+        hideProgress();
+        setProgress(0, 'Подготовка...');
+        syncInfo.style.display = 'block';
+        syncInfoText.textContent = 'Синхронизация запущена...';
+        showStatus('<i class="fas fa-spinner fa-spin"></i> Синхронизация запущена...', 'info');
+        syncTotalTypes = 0;
+        syncDone = false;
+
+        eventSource = new EventSource('/api/sync_stream?session_id=' + encodeURIComponent(sessionId));
+        let processed = 0;
+
+        eventSource.onmessage = function(e) {
+            try {
+                const data = JSON.parse(e.data);
+                console.log('SSE data:', data);
+
+                if (data.type === 'total') {
+                    syncTotalTypes = data.total_types || 0;
+                } else if (data.type === 'progress') {
+                    syncInfoText.innerHTML = 'Синхронизация запущена... Обрабатывается: <span style="color:#3b82f6; font-weight:600;">' + (data.table || '—') + '</span>';
+                    processed++;
+                    const total = syncTotalTypes || 28;
+                    const percent = Math.min(Math.round((processed / total) * 100), 95);
+                    setProgress(percent, data.table || 'Обработка...');
+                } else if (data.type === 'result') {
+                    if (data.message.includes('Сохранено')) {
+                        showStatus('✅ ' + data.message, 'success');
+                    }
+                } else if (data.type === 'done') {
+                    syncDone = true;
+                    setProgress(100, 'Готово!');
+                    syncInfoText.textContent = 'Синхронизация завершена';
+                    showStatus('✅ ' + data.message, 'success');
+                    eventSource.close();
+                    eventSource = null;
+                    loadGuidData();
+                    loadGuidTypes();
+                    setTimeout(hideProgress, 3000);
+                } else if (data.type === 'error') {
+                    showStatus('❌ ' + data.message, 'error');
+                    eventSource.close();
+                    eventSource = null;
+                    hideProgress();
+                }
+            } catch (err) {
+                console.error('Ошибка парсинга SSE:', err);
+            }
+        };
+
+        eventSource.onerror = function(e) {
+            console.error('SSE ошибка:', e);
+            // Игнорируем ошибку, если синхронизация уже завершилась успешно
+            if (syncDone) return;
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            hideProgress();
+            showStatus('❌ Ошибка соединения при синхронизации', 'error');
+        };
+    }
+
+    // ---- Функция отрисовки таблицы объектов ----
+    function getTypeClass(typeStr) {
+        if (typeStr && typeStr.startsWith('Справочник')) return 'type-catalog';
+        if (typeStr && typeStr.startsWith('Документ')) return 'type-document';
+        if (typeStr && typeStr.startsWith('ПланВидовХарактеристик')) return 'type-chart';
+        return 'type-other';
+    }
+
+    function renderTable(objects) {
+        // Пагинация: показываем только текущую страницу
+        const total = objects.length;
+        const totalPages = Math.max(1, Math.ceil(total / objPerPage));
+        if (objPage > totalPages) objPage = totalPages;
+        const start = (objPage - 1) * objPerPage;
+        const pageObjects = objects.slice(start, start + objPerPage);
+
+        objectsBody.innerHTML = '';
+        if (!pageObjects || pageObjects.length === 0) {
+            objectsBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#94a3b8;">Нет объектов для отображения</td></tr>';
+        }
+        // Нужно использовать индекс из полного массива, а не из страницы
+        pageObjects.forEach((obj) => {
+            const globalIndex = start + pageObjects.indexOf(obj);
+            const tr = document.createElement('tr');
+            const typeStr = obj._type || 'Объект';
+            const typeClass = getTypeClass(typeStr);
+            const typeBadge = `<span class="badge ${typeClass}">${typeStr}</span>`;
+            let folderBadge = '';
+            if (obj.IsFolder !== undefined) {
+                folderBadge = obj.IsFolder ? '<span class="badge badge-folder"><i class="fas fa-folder"></i> Да</span>' : '<span class="text-muted">Нет</span>';
+            }
+            const actions = `<button class="btn-icon replace-btn" data-index="${globalIndex}" title="Заменить GUID"><i class="fas fa-edit"></i></button>`;
+            tr.innerHTML = `
+                <td>${typeBadge}</td>
+                <td><code class="badge-guid" title="${obj.Ref || ''}">${obj.Ref || ''}</code></td>
+                <td>${obj.Description || ''}</td>
+                <td>${obj.Code || ''}</td>
+                <td>${folderBadge}</td>
+                <td>${obj.Parent ? `<code class="badge-guid" title="${obj.Parent}">${obj.Parent}</code>` : ''}</td>
+                <td>${obj.Owner ? `<code class="badge-guid" title="${obj.Owner}">${obj.Owner}</code>` : ''}</td>
+                <td>${actions}</td>
+            `;
+            objectsBody.appendChild(tr);
+        });
+        document.querySelectorAll('.replace-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const idx = parseInt(this.getAttribute('data-index'));
+                const obj = currentObjects[idx];
+                const oldGuid = obj.Ref;
+                if (!oldGuid) {
+                    alert('У объекта нет GUID для замены.');
+                    return;
+                }
+                const newGuid = prompt('Введите новый GUID:', oldGuid);
+                if (newGuid && newGuid !== oldGuid) {
+                    const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                    if (!guidRegex.test(newGuid)) {
+                        alert('Неверный формат GUID. Ожидается: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx');
+                        return;
+                    }
+                    obj.Ref = newGuid;
+                    renderTable(currentObjects);
+                    showStatus('🔄 GUID заменён в памяти. Для сохранения нажмите "Скачать XML".', 'info');
+                }
+            });
+        });
+        // Обновляем пагинацию объектов
+        const pagination = document.getElementById('objectsPagination');
+        const pageInfo = document.getElementById('objPageInfo');
+        const pagePrev = document.getElementById('objPagePrev');
+        const pageNext = document.getElementById('objPageNext');
+        pagination.style.display = 'flex';
+        pageInfo.textContent = `${objPage} / ${totalPages}`;
+        pagePrev.disabled = objPage <= 1;
+        pageNext.disabled = objPage >= totalPages;
+        document.getElementById('objectCount').textContent = `${total} объектов (стр. ${objPage}/${totalPages})`;
+    }
+
+    // ---- Поиск по XML-объектам ----
+    let objSearchTimer = null;
+    function applySearch() {
+        const query = searchInput.value.toLowerCase().trim();
+        if (!query) {
+            renderTable(currentObjects);
+            return;
+        }
+        const filtered = currentObjects.filter(obj => {
+            return (obj.Ref && obj.Ref.toLowerCase().includes(query)) ||
+                   (obj.Description && obj.Description.toLowerCase().includes(query)) ||
+                   (obj.Code && obj.Code.toLowerCase().includes(query)) ||
+                   (obj.Parent && obj.Parent.toLowerCase().includes(query)) ||
+                   (obj.Owner && obj.Owner.toLowerCase().includes(query)) ||
+                   (obj._type && obj._type.toLowerCase().includes(query));
+        });
+        renderTable(filtered);
+        showStatus(`🔍 Найдено ${filtered.length} объектов`, 'info');
+        setTimeout(hideStatus, 3000);
+    }
+
+    searchInput.addEventListener('input', function() {
+        objPage = 1;
+        clearTimeout(objSearchTimer);
+        objSearchTimer = setTimeout(applySearch, 300);
+    });
+    clearSearchBtn.addEventListener('click', function() {
+        searchInput.value = '';
+        objPage = 1;
+        renderTable(currentObjects);
+    });
+
+    // Пагинация объектов
+    document.getElementById('objPagePrev').addEventListener('click', function() {
+        if (objPage > 1) { objPage--; renderTable(currentObjects); }
+    });
+    document.getElementById('objPageNext').addEventListener('click', function() {
+        const totalPages = Math.ceil(currentObjects.length / objPerPage);
+        if (objPage < totalPages) { objPage++; renderTable(currentObjects); }
+    });
+    document.getElementById('objPerPageSelect').addEventListener('change', function() {
+        objPerPage = parseInt(this.value);
+        objPage = 1;
+        renderTable(currentObjects);
+    });
+
+    // ---- Автозамена ----
+    autoReplaceBtn.addEventListener('click', function() {
+        if (!currentObjects || currentObjects.length === 0) {
+            showStatus('Сначала загрузите XML-файл.', 'error');
+            return;
+        }
+        autoReplaceBtn.disabled = true;
+        autoReplaceBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Замена...';
+        showStatus('<i class="fas fa-spinner fa-spin"></i> Поиск замен в базе данных...', 'info');
+        fetch('/api/auto_replace', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ objects: currentObjects })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                showStatus('Ошибка: ' + data.error, 'error');
+                return;
+            }
+            currentObjects = data.objects || [];
+            const replaced = data.total_replaced || 0;
+            const stats = data.stats || {};
+            const msg = `✅ Автозамена: заменено ${replaced}, не найдено в БД ${stats.not_found || 0}, уже совпадало ${stats.already_matched || 0}, без описания ${stats.no_description || 0}`;
+            if (replaced > 0) {
+                showStatus(msg, 'success');
+            } else {
+                showStatus(`ℹ️ ${msg.replace('✅ ', '')}`, 'info');
+            }
+            renderTable(currentObjects);
+        })
+        .catch(error => {
+            showStatus('❌ Ошибка автозамены: ' + error.message, 'error');
+        })
+        .finally(() => {
+            autoReplaceBtn.disabled = false;
+            autoReplaceBtn.innerHTML = '<i class="fas fa-magic"></i> Автозамена';
+        });
+    });
+
+    // ---- Вкладки ----
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            const tabId = this.dataset.tab;
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+            if (tabId === 'guid_db') {
+                loadGuidTypes();
+                loadGuidData();
+            }
+        });
+    });
+
+    // ---- База GUID ----
+    let guidSearchTimer = null;
+    function loadGuidTypes() {
+        fetch('/api/guid_types')
+        .then(r => r.json())
+        .then(data => {
+            guidTypes = data.types || [];
+            const select = document.getElementById('guidTypeFilter');
+            const currentVal = select.value;
+            select.innerHTML = '<option value="">Все типы</option>';
+            guidTypes.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t;
+                opt.textContent = t;
+                select.appendChild(opt);
+            });
+            if (currentVal) select.value = currentVal;
+        })
+        .catch(e => console.error('Ошибка загрузки типов:', e));
+    }
+
+    function loadGuidData() {
+        const search = document.getElementById('guidSearchInput').value;
+        const type = document.getElementById('guidTypeFilter').value;
+        const url = `/api/guid_db?search=${encodeURIComponent(search)}&type=${encodeURIComponent(type)}&page=${guidPage}&per_page=${guidPerPage}`;
+        fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            guidData = data.rows || [];
+            guidTotal = data.total || 0;
+            guidPages = data.pages || 0;
+            renderGuidTable(guidData);
+            updatePagination();
+        })
+        .catch(e => {
+            document.getElementById('guidBody').innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#ef4444;">Ошибка загрузки: ${e.message}</td></tr>`;
+        });
+    }
+
+    function updatePagination() {
+        const pagination = document.getElementById('guidPagination');
+        const pageInfo = document.getElementById('pageInfo');
+        const pagePrev = document.getElementById('pagePrev');
+        const pageNext = document.getElementById('pageNext');
+        const guidCount = document.getElementById('guidCount');
+
+        pagination.style.display = 'flex';
+        pageInfo.textContent = `${guidPage} / ${guidPages || 1}`;
+        pagePrev.disabled = guidPage <= 1;
+        pageNext.disabled = guidPage >= guidPages;
+        if (guidPages > 0) {
+            guidCount.textContent = `${guidTotal} записей (стр. ${guidPage}/${guidPages})`;
+        } else {
+            guidCount.textContent = `0 записей`;
+        }
+    }
+
+    function renderGuidTable(rows) {
+        const tbody = document.getElementById('guidBody');
+        if (!rows || rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#94a3b8;">Нет записей. Нажмите "Синхронизировать" для загрузки данных из 1С.</td></tr>';
+            document.getElementById('guidCount').textContent = '0 записей';
+            return;
+        }
+        tbody.innerHTML = '';
+        rows.forEach(row => {
+            const tr = document.createElement('tr');
+            const typeClass = getTypeClass(row.type);
+            const typeBadge = `<span class="badge ${typeClass}">${row.type || ''}</span>`;
+            const copyBtn = `<button class="btn-icon copy-guid-btn" data-guid="${row.guid}" title="Скопировать GUID"><i class="fas fa-copy"></i></button>`;
+            const folderBadge = row.is_folder ? '<span class="badge badge-success">Группа</span>' : '<span class="badge badge-secondary">Элемент</span>';
+            tr.innerHTML = `
+                <td>${typeBadge}</td>
+                <td>${row.name || ''}</td>
+                <td><code class="badge-guid" title="${row.guid || ''}">${row.guid || ''}</code></td>
+                <td>${folderBadge}</td>
+                <td>${copyBtn}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+        // Копирование с fallback для HTTP
+        document.querySelectorAll('.copy-guid-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const guid = this.dataset.guid;
+                if (!guid) return;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(guid).then(() => {
+                        this.innerHTML = '<i class="fas fa-check" style="color:#22c55e;"></i>';
+                        setTimeout(() => { this.innerHTML = '<i class="fas fa-copy"></i>'; }, 1500);
+                    }).catch(() => fallbackCopy(guid, this));
+                } else {
+                    fallbackCopy(guid, this);
+                }
+            });
+        });
+        document.getElementById('guidCount').textContent = rows.length + ' записей';
+    }
+
+    function fallbackCopy(text, btn) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            btn.innerHTML = '<i class="fas fa-check" style="color:#22c55e;"></i>';
+            setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy"></i>'; }, 1500);
+        } catch (e) {
+            prompt('Скопируйте GUID вручную:', text);
+        }
+        document.body.removeChild(textarea);
+    }
+
+    document.getElementById('guidSearchInput').addEventListener('input', function() {
+        guidPage = 1;
+        clearTimeout(guidSearchTimer);
+        guidSearchTimer = setTimeout(loadGuidData, 300);
+    });
+    document.getElementById('guidTypeFilter').addEventListener('change', function() { guidPage = 1; loadGuidData(); });
+    refreshGuidBtn.addEventListener('click', function() { guidPage = 1; loadGuidData(); });
+
+    // Пагинация
+    document.getElementById('pagePrev').addEventListener('click', function() {
+        if (guidPage > 1) { guidPage--; loadGuidData(); }
+    });
+    document.getElementById('pageNext').addEventListener('click', function() {
+        if (guidPage < guidPages) { guidPage++; loadGuidData(); }
+    });
+    document.getElementById('perPageSelect').addEventListener('change', function() {
+        guidPerPage = parseInt(this.value);
+        guidPage = 1;
+        loadGuidData();
+    });
+
+    syncDbBtn.addEventListener('click', function() {
+        if (!currentFilename) {
+            showStatus('Сначала загрузите XML-файл.', 'error');
+            return;
+        }
+        if (!confirm('Синхронизация удалит текущую базу GUID и загрузит новые данные из 1С.\n\nПродолжить?')) {
+            return;
+        }
+        startSync();
+    });
+
+    downloadBtn.addEventListener('click', function() {
+        if (!currentObjects || currentObjects.length === 0) {
+            showStatus('Нет данных для сохранения.', 'error');
+            return;
+        }
+        downloadBtn.disabled = true;
+        downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Генерация...';
+        showStatus('⏳ Генерация XML...', 'info');
+        fetch('/api/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ objects: currentObjects, session_id: sessionId })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.error || 'Ошибка генерации'); });
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = currentFilename ? currentFilename.replace(/\.xml$/i, '') + '_modified.xml' : 'modified.xml';
+            link.click();
+            showStatus('✅ XML файл успешно скачан!', 'success');
+        })
+        .catch(error => {
+            showStatus('❌ Ошибка скачивания: ' + error.message, 'error');
+        })
+        .finally(() => {
+            downloadBtn.disabled = false;
+            downloadBtn.innerHTML = '<i class="fas fa-download"></i> Скачать XML';
+        });
+    });
+
+    console.log('Страница загружена. Ожидание действий пользователя.');
+</script>
+</body>
+</html>

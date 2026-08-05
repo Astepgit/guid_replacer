@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Окружение
+.env
+venv/
+.venv/
+
+# Данные приложения
+guid_cache.db
+uploads/
+*.log
+
+# Тестовые файлы
+for_upload-*.xml
