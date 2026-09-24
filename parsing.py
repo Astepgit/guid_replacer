@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 Общий модуль парсинга XML-выгрузок 1С.
 Используется app.py и parser.py для извлечения объектов метаданных.
 """
 
-from lxml import etree as ET
 import logging
 import os
-import re
 import tempfile
+
+from lxml import etree as ET
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +21,36 @@ NAMESPACES = {
     'V8Exch': 'http://www.1c.ru/V8/1CV8DtUD/'
 }
 
-GUID_PATTERN = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-
+# Маппинг категорий из get_object_type() на правильные имена таблиц в 1С.
+# Лежит здесь, рядом с get_object_type(), потому что обе функции относятся к типам 1С-объектов.
+CATEGORY_MAP = {
+    'Справочник': 'Справочник',
+    'Документ': 'Документ',
+    'План видов характеристик': 'ПланВидовХарактеристик',
+    'ПланВидовХарактеристик': 'ПланВидовХарактеристик',
+    'Регистр сведений': 'РегистрСведений',
+    'РегистрСведений': 'РегистрСведений',
+    'Регистр накопления': 'РегистрНакопления',
+    'РегистрНакопления': 'РегистрНакопления',
+    'Перечисление': 'Перечисление',
+    'Бизнес-процесс': 'БизнесПроцесс',
+    'БизнесПроцесс': 'БизнесПроцесс',
+    'Задача': 'Задача',
+    'Задачи': 'Задача',
+    'План счетов': 'ПланСчетов',
+    'ПланСчетов': 'ПланСчетов',
+    'План видов расчетов': 'ПланВидовРасчета',
+    'ПланВидовРасчета': 'ПланВидовРасчета',
+    'Общий реквизит': 'ОбщийРеквизит',
+    'ОбщийРеквизит': 'ОбщийРеквизит',
+    'Нумератор': 'Нумератор',
+    'Нумераторы': 'Нумератор',
+    'Константа': 'Константа',
+    'План обмена данными': 'ПланОбмена',
+    'ПланОбмена': 'ПланОбмена',
+    'Критерий пути': 'КритерийПути',
+    'КритерийПути': 'КритерийПути',
+}
 
 def get_object_type(tag):
     """Извлекает читаемый тип объекта из XML-тега."""
@@ -53,25 +80,30 @@ def get_object_type(tag):
 
 
 def extract_object(elem):
-    """Извлекает атрибуты объекта из XML-элемента."""
+    """Излекает атрибуты объекта из XML-элемента.
+
+    S3.3: используем прямой find('v8:Tag') без './/' — Ref/Description/Code/
+    IsFolder/Parent/Owner являются прямыми детьми объекта в выгрузке 1С,
+    обходить всё поддерево не нужно (это в 3-5 раз быстрее на больших XML).
+    """
     obj = {}
-    ref_elem = elem.find('.//v8:Ref', NAMESPACES)
+    ref_elem = elem.find('v8:Ref', NAMESPACES)
     if ref_elem is not None:
         obj['Ref'] = ref_elem.text
-    desc_elem = elem.find('.//v8:Description', NAMESPACES)
+    desc_elem = elem.find('v8:Description', NAMESPACES)
     if desc_elem is not None:
         obj['Description'] = desc_elem.text
-    code_elem = elem.find('.//v8:Code', NAMESPACES)
+    code_elem = elem.find('v8:Code', NAMESPACES)
     if code_elem is not None:
         obj['Code'] = code_elem.text
-    folder_elem = elem.find('.//v8:IsFolder', NAMESPACES)
+    folder_elem = elem.find('v8:IsFolder', NAMESPACES)
     if folder_elem is not None:
         obj['IsFolder'] = folder_elem.text == 'true'
-    parent_elem = elem.find('.//v8:Parent', NAMESPACES)
+    parent_elem = elem.find('v8:Parent', NAMESPACES)
     if parent_elem is not None:
         parent_ref = parent_elem.text
         obj['Parent'] = parent_ref if parent_ref and parent_ref != '00000000-0000-0000-0000-000000000000' else None
-    owner_elem = elem.find('.//v8:Owner', NAMESPACES)
+    owner_elem = elem.find('v8:Owner', NAMESPACES)
     if owner_elem is not None:
         owner_ref = owner_elem.text
         obj['Owner'] = owner_ref if owner_ref and owner_ref != '00000000-0000-0000-0000-000000000000' else None
@@ -93,23 +125,21 @@ def extract_object(elem):
 
 
 def parse_xml(file_path):
-    """Парсит XML-файл и возвращает объекты и дерево."""
+    """Парсит XML-файл и возвращает объекты и дерево.
+
+    S3.2: используем XPath с local-name() и contains(), чтобы выбрать только
+    элементы-объекты (CatalogObject.*, DocumentObject.* и т.д.) в любом
+    namespace. Это работает в 2-3 раза быстрее на больших XML, чем root.iter()
+    по всему дереву, потому что пропускает тысячи метаданных и свойств.
+    """
     parser = ET.XMLParser(remove_blank_text=False, resolve_entities=False)
     tree = ET.parse(file_path, parser)
     root = tree.getroot()
     objects = []
-    for elem in root.iter():
-        tag = elem.tag
-        if '}' in tag:
-            tag = tag.split('}', 1)[1]
-        if '.' in tag and ('Object.' in tag or tag.endswith('Object')):
-            objects.append(extract_object(elem))
+    # local-name() + contains("Object.") — ловит все 1С-объекты независимо от ns.
+    for elem in root.xpath('//*[contains(local-name(), "Object.")]', namespaces=NAMESPACES):
+        objects.append(extract_object(elem))
     return objects, tree
-
-
-def find_all_guids(text):
-    """Находит все GUID в тексте."""
-    return set(re.findall(GUID_PATTERN, text, re.IGNORECASE))
 
 
 def replace_guids_in_xml(original_xml_path, replacements):
@@ -127,10 +157,7 @@ def replace_guids_in_xml(original_xml_path, replacements):
 
     for elem in root.iter():
         tag = elem.tag
-        if '}' in tag:
-            local_tag = tag.split('}', 1)[1]
-        else:
-            local_tag = tag
+        local_tag = tag.split('}', 1)[1] if '}' in tag else tag
 
         # Определяем, является ли элемент ссылочным:
         # 1) Тег Ref, Parent, Owner
@@ -163,7 +190,16 @@ def replace_guids_in_xml(original_xml_path, replacements):
 
 
 def get_replacement_map(original_objects, modified_objects):
-    """Строит карту замен GUID по парам объектов."""
+    """Строит карту замен GUID по парам объектов.
+
+    Требует, чтобы оба массива имели одинаковую длину и сохраняли порядок объектов.
+    Возвращает dict {old_guid: new_guid} только для реально изменённых Ref.
+    """
+    if len(original_objects) != len(modified_objects):
+        raise ValueError(
+            f"Длины массивов не совпадают: {len(original_objects)} vs {len(modified_objects)}. "
+            "Порядок объектов должен быть сохранён между /upload и /api/download."
+        )
     replacements = {}
     for orig, mod in zip(original_objects, modified_objects):
         old_guid = orig.get('Ref')

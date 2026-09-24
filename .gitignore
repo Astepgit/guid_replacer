@@ -13,6 +13,14 @@ guid_cache.db
 uploads/
 *.log
 *.zip
+app.log
+app.log.*
+
+# Конфигурация с секретами (используйте config.example.yaml как шаблон)
+config.yaml
 
 # Тестовые файлы
 for_upload-*.xml
+.pytest_cache/
+.coverage
+htmlcov/

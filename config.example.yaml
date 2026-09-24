@@ -1,0 +1,74 @@
+name: Koda
+version: 0.0.1
+schema: v1
+models:
+  - name: Koda Models
+    provider: koda-chat-models
+    model: AUTODETECT
+    roles:
+      - agent
+      - chat
+      - edit
+context:
+  - provider: code
+  - provider: docs
+  - provider: diff
+  - provider: terminal
+  - provider: problems
+  - provider: folder
+  - provider: codebase
+mcpServers:
+  - name: codepilot1c
+    url: http://127.0.0.1:8765/mcp
+    headers:
+      # ВАЖНО: значение брать из переменной окружения MCP_CODEPILOT_TOKEN
+      # Не коммитить реальный токен в репозиторий!
+      Authorization: Bearer ${MCP_CODEPILOT_TOKEN}
+  - name: 1c-mcp-metadata
+    command: npx
+    args:
+      - -y
+      - mcp-remote
+      - http://196.168.0.64:8001/mcp
+      - --allow-http
+      - --transport
+      - http-only
+      - --header
+      - "x-collection-name: 1c_rag"
+    env: {}
+  - name: 1c-syntax-helper
+    command: npx
+    args:
+      - -y
+      - mcp-remote
+      - http://196.168.0.64:8002/mcp
+      - --allow-http
+      - --transport
+      - http-only
+      - --header
+      - "Content-Type: application/json"
+    env: {}
+  - name: 1c-kruglova
+    command: /home/astep/MCP/mcp-1c-linux-amd64
+    args:
+      - --base
+      - http://erp-700/Kruglova_CA/hs/mcp-1c
+      - --dump
+      - /mnt/nvme/1C_develop/ERP_Kruglova
+      - --user
+      - ${MCP_1C_USER}
+      - --password
+      - ${MCP_1C_PASSWORD}
+    env: {}
+  - name: 1c-vysotskaya
+    command: /home/astep/MCP/mcp-1c-linux-amd64
+    args:
+      - --base
+      - http://erp-700/Vysotskaya_TA/hs/mcp-1c
+      - --dump
+      - /mnt/nvme/1C_develop/ERP_Vysotskaya
+      - --user
+      - ${MCP_1C_USER}
+      - --password
+      - ${MCP_1C_PASSWORD}
+    env: {}
