@@ -180,6 +180,52 @@ class TestAutoReplaceRoute:
         assert j['total_replaced'] == 1
         assert j['objects'][0]['Ref'] == 'newguid-bbbb-2222-2222-222222222222'
 
+    def test_is_folder_mismatch_fallback(self, app_client, populated_db):
+        """Fix: если БД не содержит is_folder-инфы (sync упал на запросе с ЭтоГруппа),
+        fallback по (type, name) всё равно находит единственного кандидата.
+        """
+        # Сценарий: в XML объект IsFolder=True, в БД есть только с is_folder=0
+        # (потому что fallback sync_db.py не достал ЭтоГруппа).
+        objects = [{
+            '_type': 'Справочник.Номенклатура',
+            'Description': 'Товар А',
+            'Ref': 'oldguid-0000-0000-0000-000000000000',
+            'IsFolder': True  # в XML это группа, а в БД сохранено как элемент
+        }]
+        r = app_client.post('/api/auto_replace', json={'objects': objects})
+        j = r.get_json()
+        # Ожидаем: fallback найдёт единственного кандидата (newguid-aaaa-...) по (type, name)
+        assert j['total_replaced'] == 1, f'Expected 1 replacement via fallback, got {j["total_replaced"]}'
+        assert j['objects'][0]['Ref'] == 'newguid-aaaa-1111-1111-111111111111'
+
+    def test_ambiguous_multiple_candidates_not_replaced(self, app_client, populated_db):
+        """Если для (type, name) есть несколько GUID-ов с разным is_folder и точного
+        совпадения нет — пропускаем, не делаем неоднозначную замену.
+        """
+        # Добавим второй GUID для 'Товар А' с is_folder=True
+        from db import get_db_connection
+        conn = get_db_connection()
+        conn.execute(
+            'INSERT OR REPLACE INTO objects (type, name, guid, is_folder) VALUES (?, ?, ?, ?)',
+            ('Справочник.Номенклатура', 'Товар А', 'another-guid-aaaa-1111-1111-111111111111', 1)
+        )
+        conn.commit()
+        conn.close()
+
+        # В XML объект с IsFolder=None (не указано) — не совпадает ни с True, ни с False в БД
+        # → fallback найдёт 2 кандидата → пропустит как неоднозначное
+        objects = [{
+            '_type': 'Справочник.Номенклатура',
+            'Description': 'Товар А',
+            'Ref': 'oldguid-0000-0000-0000-000000000000',
+            # IsFolder не указан — bool(obj.get('IsFolder', False)) даст False
+            # → точное совпадение по (type, name, False) найдёт newguid-aaaa-...
+        }]
+        r = app_client.post('/api/auto_replace', json={'objects': objects})
+        j = r.get_json()
+        # Точное совпадение по is_folder=False должно сработать (не fallback)
+        assert j['total_replaced'] == 1
+
 
 class TestDownloadRoute:
     def _upload(self, client):

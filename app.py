@@ -207,8 +207,10 @@ def auto_replace_guids():
         stats = {'replaced': 0, 'not_found': 0, 'already_matched': 0, 'no_description': 0, 'no_type': 0, 'no_guid': 0}
 
         # S3.1: загружаем весь индекс GUID одним SELECT, O(1) lookup per object
-        # вместо N+1 запросов к SQLite.
-        guid_index = load_guid_index()
+        # вместо N+1 запросов к SQLite. Возвращаем два индекса:
+        # - guid_index: точное совпадение по (type, name, is_folder)
+        # - guid_index_no_folder: fallback по (type, name) без is_folder
+        guid_index, guid_index_no_folder = load_guid_index()
 
         for obj in objects:
             obj_type = obj.get('_type')
@@ -229,6 +231,20 @@ def auto_replace_guids():
                 modified_objects.append(obj)
                 continue
             new_guid = guid_index.get((obj_type, obj_name, is_folder))
+            if not new_guid:
+                # Fix: fallback по (type, name) без учёта is_folder.
+                # Применяется, когда sync_db не смог получить ЭтоГруппа из 1С
+                # и сохранил все строки с is_folder=0. Если для (type, name) есть
+                # ровно один кандидат — используем его. Если несколько — неоднозначно,
+                # пропускаем и логируем warning.
+                candidates = guid_index_no_folder.get((obj_type, obj_name), [])
+                if len(candidates) == 1:
+                    new_guid = candidates[0]
+                    logger.info(f"Найден GUID для {obj_name} ({obj_type}) через fallback по (type, name), "
+                                f"is_folder в БД не соответствует XML")
+                elif len(candidates) > 1:
+                    logger.warning(f"Для {obj_name} ({obj_type}) найдено {len(candidates)} GUID-ов с разным "
+                                  f"is_folder, неоднозначно — пропускаем")
             if not new_guid:
                 stats['not_found'] += 1
                 modified_objects.append(obj)

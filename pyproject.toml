@@ -30,6 +30,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["B017"]  # allow pytest.raises(Exception)
+"scripts/*" = ["E402"]  # allow late imports (env vars must be set before importing app)
 
 [tool.black]
 line-length = 120

@@ -101,6 +101,48 @@ def execute_query(query):
         return None
 
 
+def _parse_is_folder(value):
+    """Расширенный парсинг признака группы из 1С.
+
+    1С может возвращать ЭтоГруппа в разных форматах:
+      - JSON boolean: true / false
+      - String: 'true' / 'false'
+      - Russian: 'Истина' / 'Ложь' (или 'Да' / 'Нет')
+      - Integer: 1 / 0
+    """
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ('true', '1', 'истина', 'да', 'yes', 'y', 't')
+
+
+def _fetch_is_folder_map(name, full_table):
+    """Делает отдельный запрос к 1С для получения (GUID, ЭтоГруппа) для каталога.
+
+    Используется, когда основной fallback-вариант не вернул колонку ЭтоГруппа
+    (тогда все строки получили is_folder=0, и группы не будут сопоставлены).
+    Возвращает dict {guid: bool} или None при ошибке.
+    """
+    query = f"""
+    ВЫБРАТЬ
+        УНИКАЛЬНЫЙИДЕНТИФИКАТОР({name}.Ссылка) КАК ГУИД,
+        {name}.ЭтоГруппа КАК ЭтоГруппа
+    ИЗ
+        {full_table} КАК {name}
+    """
+    rows = execute_query(query)
+    if rows is None:
+        return None
+    result = {}
+    for row in rows:
+        if len(row) >= 2 and row[0] is not None:
+            guid = str(row[0])
+            is_folder = _parse_is_folder(row[1]) if row[1] is not None else False
+            result[guid] = is_folder
+    return result
+
+
 def _build_queries(name, full_table, is_catalog):
     """Возвращает список (variant_name, sql_query) для перебора.
 
@@ -212,6 +254,33 @@ def run_sync(xml_file, log_callback=print):
                 break
             log_callback(f"  Вариант '{variant_name}' не удался, пробуем следующий...")
 
+        # Fix: если для каталога использовался fallback-вариант БЕЗ ЭтоГруппа
+        # (т.е. строки не содержат 3-й колонки или она None), делаем отдельный
+        # запрос для получения (GUID, ЭтоГруппа) и дополняем строки.
+        # Иначе все группы получат is_folder=0 и не будут найдены при автозамене.
+        if is_catalog and rows is not None and len(rows) > 0:
+            needs_is_folder = (
+                len(rows[0]) < 3 or
+                all(r[2] is None for r in rows if len(r) >= 3)
+            )
+            if needs_is_folder and 'ЭтоГруппа' not in used_variant:
+                log_callback(f"  Вариант '{used_variant}' без ЭтоГруппа — дозапрашиваем...")
+                is_folder_map = _fetch_is_folder_map(name, full_table)
+                if is_folder_map:
+                    # Дополняем каждую строку колонкой ЭтоГруппа из map
+                    augmented_rows = []
+                    for row in rows:
+                        if len(row) >= 2 and row[1] is not None:
+                            guid = str(row[1])
+                            is_folder_val = is_folder_map.get(guid, False)
+                            augmented_rows.append([row[0], row[1], is_folder_val])
+                        else:
+                            augmented_rows.append(row)
+                    rows = augmented_rows
+                    log_callback(f"  ЭтоГруппа получен для {len(is_folder_map)} GUID-ов")
+                else:
+                    log_callback(f"  Не удалось получить ЭтоГруппа для {full_table}")
+
         if rows is not None:
             all_results[type_str] = rows
             total_fetched += len(rows)
@@ -234,15 +303,15 @@ def run_sync(xml_file, log_callback=print):
         c.execute('DELETE FROM objects')
 
         # S3.6: батч-вставка через executemany — в 5-10 раз быстрее, чем построчно.
+        # Используем расширенный _parse_is_folder для поддержки разных форматов 1С.
         batch = []
         for type_str, rows in all_results.items():
             for row in rows:
                 if len(row) >= 2:
                     n = str(row[0]) if row[0] is not None else ''
                     g = str(row[1]) if row[1] is not None else ''
-                    is_folder = 0
-                    if len(row) >= 3 and row[2] is not None:
-                        is_folder = 1 if str(row[2]).lower() in ('true', '1', 'истина') else 0
+                    is_folder_val = row[2] if len(row) >= 3 else False
+                    is_folder = 1 if _parse_is_folder(is_folder_val) else 0
                     if n and g:
                         batch.append((type_str, n, g, is_folder))
         if batch:

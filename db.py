@@ -51,11 +51,22 @@ def init_db():
 def load_guid_index():
     """Загружает всю таблицу objects в dict для O(1) lookup в auto_replace.
 
-    Возвращает dict: {(type, name, is_folder: bool) -> guid: str}
+    Возвращает:
+        guid_index: dict {(type, name, is_folder: bool) -> guid: str}
+        guid_index_no_folder: dict {(type, name) -> [guid, ...]}
+            для fallback-поиска, когда в БД нет is_folder-инфы или
+            точное совпадение по is_folder не найдено.
     """
     conn = get_db_connection()
     try:
         rows = conn.execute("SELECT type, name, is_folder, guid FROM objects").fetchall()
-        return {(r['type'], r['name'], bool(r['is_folder'])): r['guid'] for r in rows}
+        guid_index = {}
+        guid_index_no_folder = {}
+        for r in rows:
+            key = (r['type'], r['name'], bool(r['is_folder']))
+            guid_index[key] = r['guid']
+            no_folder_key = (r['type'], r['name'])
+            guid_index_no_folder.setdefault(no_folder_key, []).append(r['guid'])
+        return guid_index, guid_index_no_folder
     finally:
         conn.close()
