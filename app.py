@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
-from flask import Flask, request, jsonify, render_template, send_file, Response, stream_with_context
-from werkzeug.exceptions import RequestEntityTooLarge
-from lxml import etree as ET
 import json
-import os
-import sqlite3
-import subprocess
-import time
 import logging
 import logging.handlers
+import os
+import threading
+import time
 import uuid
-from werkzeug.utils import secure_filename
+
 from dotenv import load_dotenv
-from parsing import parse_xml, replace_guids_in_xml, get_replacement_map
+from flask import Flask, Response, jsonify, render_template, request, send_file, stream_with_context
+from lxml import etree as ET
+from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.utils import secure_filename
+
+from db import get_db_connection, init_db, load_guid_index
+from parsing import get_replacement_map, parse_xml, replace_guids_in_xml
+from sync_db import run_sync
 
 load_dotenv()
 
@@ -23,8 +25,16 @@ log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
 log_file = os.environ.get('LOG_FILE', 'app.log')
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 100 * 1024 * 1024))
+
+
+def get_upload_folder():
+    """Возвращает путь к папке загрузок, создавая её при необходимости.
+    Читает env при каждом вызове, чтобы работало в тестах с monkeypatch.
+    """
+    upload_folder = os.environ.get('UPLOAD_FOLDER', 'uploads')
+    os.makedirs(upload_folder, exist_ok=True)
+    return upload_folder
 
 # Настраиваем логирование после создания Flask-приложения
 _file_handler = logging.handlers.RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
@@ -46,30 +56,67 @@ app.logger.addHandler(_stream_handler)
 
 logger = logging.getLogger(__name__)
 
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+# S2.1: инициализация БД на уровне модуля, а не при каждом запросе /
+with app.app_context():
+    init_db()
 
-# Сессионное хранение: {session_id: {'xml_path': str, 'filename': str, 'created_at': float}}
+# Сессионное хранение: {session_id: {'xml_path': str, 'filename': str, 'created_at': float, 'replacements': dict}}
 _sessions = {}
+_sessions_lock = threading.Lock()
 SESSION_TTL = int(os.environ.get('SESSION_TTL', 3600))  # 1 час в секундах
+
+# Список временных файлов для очистки после отдачи ответа
+_pending_temp_files = []
+_pending_temp_files_lock = threading.Lock()
+
+
+def _track_temp_file(path):
+    """Регистрирует временный файл для удаления после отдачи ответа."""
+    if path:
+        with _pending_temp_files_lock:
+            _pending_temp_files.append(path)
+
+
+def _cleanup_tracked_temp_files():
+    """Удаляет все временные файлы, накопленные в текущем запросе."""
+    with _pending_temp_files_lock:
+        files_to_remove = list(_pending_temp_files)
+        _pending_temp_files.clear()
+    for path in files_to_remove:
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+                logger.debug(f"Удалён временный файл: {path}")
+        except OSError as e:
+            logger.warning(f"Не удалось удалить временный файл {path}: {e}")
+
+
+@app.after_request
+def _cleanup_temp_files_after_request(response):
+    """Очищает временные файлы (modified XML и т.д.) после отдачи ответа."""
+    _cleanup_tracked_temp_files()
+    return response
 
 
 def cleanup_sessions():
-    """Удаляет сессии старше SESSION_TTL и их файлы."""
+    """Удаляет сессии старше SESSION_TTL и их файлы. Потокобезопасно."""
     now = time.time()
-    expired = [sid for sid, sdata in _sessions.items()
-               if now - sdata.get('created_at', 0) > SESSION_TTL]
-    for sid in expired:
-        sdata = _sessions.pop(sid, None)
-        if sdata:
-            xml_path = sdata.get('xml_path')
-            if xml_path and os.path.exists(xml_path):
-                try:
-                    os.remove(xml_path)
-                    logger.info(f"Удалён файл истекшей сессии {sid}: {xml_path}")
-                except OSError as e:
-                    logger.warning(f"Не удалось удалить файл {xml_path}: {e}")
+    with _sessions_lock:
+        expired = [sid for sid, sdata in _sessions.items()
+                   if now - sdata.get('created_at', 0) > SESSION_TTL]
+        for sid in expired:
+            sdata = _sessions.pop(sid, None)
+            if sdata:
+                xml_path = sdata.get('xml_path')
+                if xml_path and os.path.exists(xml_path):
+                    try:
+                        os.remove(xml_path)
+                        logger.info(f"Удалён файл истекшей сессии {sid}: {xml_path}")
+                    except OSError as e:
+                        logger.warning(f"Не удалось удалить файл {xml_path}: {e}")
     if expired:
         logger.info(f"Очищено {len(expired)} истекших сессий")
+
 
 # Пространства имён для поиска (используются только для парсинга объектов)
 NAMESPACES = {
@@ -80,91 +127,18 @@ NAMESPACES = {
     'V8Exch': 'http://www.1c.ru/V8/1CV8DtUD/'
 }
 
-DB_PATH = os.environ.get('DB_PATH', 'guid_cache.db')
-
-# ---- Работа с базой данных ----
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def init_db():
-    conn = get_db_connection()
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS objects (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT,
-            name TEXT,
-            guid TEXT,
-            is_folder INTEGER DEFAULT 0,
-            UNIQUE(type, name, is_folder)
-        )
-    ''')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_type_name ON objects(type, name)')
-    conn.commit()
-    conn.close()
-
-def get_guid_by_type_and_name(type_name, name, is_folder=False):
-    conn = get_db_connection()
-    cursor = conn.execute(
-        "SELECT guid FROM objects WHERE type = ? AND name = ? AND is_folder = ? LIMIT 1",
-        (type_name, name, 1 if is_folder else 0)
-    )
-    row = cursor.fetchone()
-    conn.close()
-    return row['guid'] if row else None
-
-def sync_db_stream(xml_file):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    script_path = os.path.join(script_dir, 'sync_db.py')
-    if not os.path.exists(script_path):
-        yield f"data: {json.dumps({'error': 'sync_db.py не найден'})}\n\n"
-        return
-    env = os.environ.copy()
-    process = subprocess.Popen(
-        ['python3', script_path, xml_file],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-        env=env
-    )
-    total_types = 0
-    try:
-        for line in iter(process.stdout.readline, ''):
-            line = line.strip()
-            if line:
-                if line.startswith('ВСЕГО_ТИПОВ:'):
-                    total_types = int(line.split(':', 1)[1].strip())
-                    yield f"data: {json.dumps({'type': 'total', 'total_types': total_types})}\n\n"
-                elif 'Синхронизация завершена' in line:
-                    yield f"data: {json.dumps({'type': 'done', 'message': line})}\n\n"
-                elif 'Обрабатывается:' in line:
-                    parts = line.split('Обрабатывается:')
-                    if len(parts) > 1:
-                        table = parts[1].strip()
-                        yield f"data: {json.dumps({'type': 'progress', 'table': table, 'total_types': total_types, 'message': line})}\n\n"
-                elif 'Получено' in line or 'Не удалось получить данные' in line:
-                    yield f"data: {json.dumps({'type': 'result', 'message': line})}\n\n"
-                else:
-                    yield f"data: {json.dumps({'type': 'log', 'message': line})}\n\n"
-        process.wait(timeout=600)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
-        yield f"data: {json.dumps({'type': 'error', 'message': 'Синхронизация превысила лимит 600 секунд'})}\n\n"
-    if process.returncode != 0:
-        yield f"data: {json.dumps({'type': 'error', 'message': f'Синхронизация завершилась с ошибкой (код {process.returncode})'})}\n\n"
 
 # ---- Маршруты ----
 @app.errorhandler(RequestEntityTooLarge)
 def handle_request_entity_too_large(e):
     return jsonify({'error': 'Файл слишком большой. Максимальный размер: 100 МБ'}), 413
 
+
 @app.route('/')
 def index():
-    init_db()
+    # S2.1: init_db уже выполнен на уровне модуля; здесь просто отдаём страницу
     return render_template('index.html')
+
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -184,7 +158,7 @@ def upload_file():
             # Если secure_filename вернул пустую строку, генерируем безопасное имя
             if not filename:
                 filename = f"upload_{uuid.uuid4().hex}.xml"
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            filepath = os.path.join(get_upload_folder(), filename)
             file.save(filepath)
             # Валидация содержимого — проверяем первый байт
             try:
@@ -198,11 +172,13 @@ def upload_file():
             try:
                 objects, tree = parse_xml(filepath)
                 session_id = str(uuid.uuid4())
-                _sessions[session_id] = {
-                    'xml_path': filepath,
-                    'filename': original_filename,
-                    'created_at': time.time(),
-                }
+                with _sessions_lock:
+                    _sessions[session_id] = {
+                        'xml_path': filepath,
+                        'filename': original_filename,
+                        'created_at': time.time(),
+                        'replacements': {},
+                    }
                 logger.info(f"Загрузка файла: session={session_id}, файл={original_filename}, объектов={len(objects)}")
                 cleanup_sessions()
                 return jsonify({'objects': objects, 'filename': original_filename, 'session_id': session_id})
@@ -218,6 +194,7 @@ def upload_file():
         logger.error(f"Необработанная ошибка: {e}")
         return jsonify({'error': f'Внутренняя ошибка сервера: {str(e)}'}), 500
 
+
 @app.route('/api/auto_replace', methods=['POST'])
 def auto_replace_guids():
     try:
@@ -228,12 +205,17 @@ def auto_replace_guids():
         replacements = {}
         modified_objects = []
         stats = {'replaced': 0, 'not_found': 0, 'already_matched': 0, 'no_description': 0, 'no_type': 0, 'no_guid': 0}
+
+        # S3.1: загружаем весь индекс GUID одним SELECT, O(1) lookup per object
+        # вместо N+1 запросов к SQLite.
+        guid_index = load_guid_index()
+
         for obj in objects:
             obj_type = obj.get('_type')
             obj_name = obj.get('Description') or ''
             old_guid = obj.get('Ref')
             old_parent = obj.get('Parent')
-            is_folder = obj.get('IsFolder', False)
+            is_folder = bool(obj.get('IsFolder', False))
             if not obj_type:
                 stats['no_type'] += 1
                 modified_objects.append(obj)
@@ -246,7 +228,7 @@ def auto_replace_guids():
                 stats['no_guid'] += 1
                 modified_objects.append(obj)
                 continue
-            new_guid = get_guid_by_type_and_name(obj_type, obj_name, is_folder)
+            new_guid = guid_index.get((obj_type, obj_name, is_folder))
             if not new_guid:
                 stats['not_found'] += 1
                 modified_objects.append(obj)
@@ -269,6 +251,13 @@ def auto_replace_guids():
             modified_objects.append(obj)
         logger.info(f"Автозамена: session={data.get('session_id', '?')}, заменено {stats['replaced']}, не найдено {stats['not_found']}, "
                     f"совпадало {stats['already_matched']}, без описания {stats['no_description']}")
+        # S2.7: сохраняем replacements в сессии для восстановления после перезагрузки страницы
+        session_id = data.get('session_id')
+        if session_id:
+            with _sessions_lock:
+                sdata = _sessions.get(session_id)
+                if sdata is not None:
+                    sdata['replacements'] = replacements
         return jsonify({
             'objects': modified_objects,
             'replacements': replacements,
@@ -279,6 +268,7 @@ def auto_replace_guids():
         logger.error(f"Ошибка в auto_replace: {e}")
         return jsonify({'error': str(e)}), 500
 
+
 @app.route('/api/download', methods=['POST'])
 def download_modified_xml():
     try:
@@ -286,10 +276,11 @@ def download_modified_xml():
         if not data or 'objects' not in data:
             return jsonify({'error': 'No objects provided'}), 400
         session_id = data.get('session_id')
-        session_data = _sessions.get(session_id)
-        if not session_data:
-            return jsonify({'error': 'Сессия не найдена. Загрузите файл заново.'}), 400
-        original_path = session_data['xml_path']
+        with _sessions_lock:
+            session_data = _sessions.get(session_id)
+            if not session_data:
+                return jsonify({'error': 'Сессия не найдена. Загрузите файл заново.'}), 400
+            original_path = session_data['xml_path']
         if not original_path or not os.path.exists(original_path):
             return jsonify({'error': 'Original XML file not found'}), 400
         try:
@@ -298,6 +289,8 @@ def download_modified_xml():
             if not replacements:
                 return jsonify({'error': 'No replacements found'}), 400
             modified_path = replace_guids_in_xml(original_path, replacements)
+            # S1.5: регистрируем временный файл для очистки после отдачи ответа
+            _track_temp_file(modified_path)
             original_filename = session_data.get('filename', 'modified')
             name, ext = os.path.splitext(original_filename)
             download_name = f"{name}_modified{ext}"
@@ -309,6 +302,7 @@ def download_modified_xml():
     except Exception as e:
         logger.error(f"Необработанная ошибка в download: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/guid_db')
 def api_guid_db():
@@ -329,15 +323,14 @@ def api_guid_db():
         if type_filter:
             conditions.append("type = ?")
             params.append(type_filter)
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-        query += " ORDER BY type, name"
-        cursor = conn.execute(query, params)
-        total = len(cursor.fetchall())
-        query += " LIMIT ? OFFSET ?"
-        params.extend([per_page, offset])
-        cursor = conn.execute(query, params)
-        rows = [dict(row) for row in cursor.fetchall()]
+        where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+        query_with_where = query + where_clause
+        # S3.4: COUNT(*) вместо fetchall() — не загружает все строки в память
+        count_query = f"SELECT COUNT(*) FROM ({query_with_where})"
+        total = conn.execute(count_query, params).fetchone()[0]
+        data_query = query_with_where + " ORDER BY type, name LIMIT ? OFFSET ?"
+        params_with_pagination = params + [per_page, offset]
+        rows = [dict(row) for row in conn.execute(data_query, params_with_pagination).fetchall()]
         conn.close()
         return jsonify({
             'rows': rows,
@@ -350,38 +343,128 @@ def api_guid_db():
         logger.error(f"Ошибка в guid_db: {e}")
         return jsonify({'error': str(e)}), 500
 
+
+def sync_db_stream(xml_path):
+    """S2.4+S2.5: запускает run_sync в том же процессе (без subprocess),
+    передаёт прогресс в SSE-поток. В начале отправляет retry-инструкцию,
+    периодически — heartbeat для удержания соединения.
+    """
+    # S2.5: SSE-инструкция для авто-переподключения при обрыве
+    yield "retry: 5000\n\n"
+
+    # S2.5: heartbeat-поток в фоне
+    heartbeat_stop = threading.Event()
+
+    # Простейший способ — использовать очередь и writer-поток
+    import queue
+    sync_queue = queue.Queue()
+    SENTINEL = object()
+
+    def log_to_queue(msg):
+        sync_queue.put(msg)
+
+    def worker():
+        try:
+            run_sync(xml_path, log_callback=log_to_queue)
+        except Exception as e:
+            logger.exception("Ошибка в run_sync (in-process)")
+            sync_queue.put(f"__ERROR__:{e}")
+        finally:
+            sync_queue.put(SENTINEL)
+
+    worker_thread = threading.Thread(target=worker, daemon=True)
+    worker_thread.start()
+
+    total_types = 0
+    last_heartbeat = time.time()
+
+    try:
+        while True:
+            # Неблокирующий опрос очереди с heartbeat
+            try:
+                item = sync_queue.get(timeout=1)
+            except queue.Empty:
+                # S2.5: отправляем heartbeat каждые 15 секунд
+                if time.time() - last_heartbeat > 15:
+                    yield ": keepalive\n\n"
+                    last_heartbeat = time.time()
+                continue
+
+            if item is SENTINEL:
+                break
+
+            if isinstance(item, str) and item.startswith("__ERROR__:"):
+                err_msg = item[len("__ERROR__:"):]
+                yield f"data: {json.dumps({'type': 'error', 'message': f'Синхронизация завершилась с ошибкой: {err_msg}'})}\n\n"
+                break
+
+            line = item.strip()
+            if not line:
+                continue
+
+            if line.startswith('ВСЕГО_ТИПОВ:'):
+                try:
+                    total_types = int(line.split(':', 1)[1].strip())
+                    yield f"data: {json.dumps({'type': 'total', 'total_types': total_types})}\n\n"
+                except ValueError:
+                    pass
+            elif 'Синхронизация завершена' in line:
+                yield f"data: {json.dumps({'type': 'done', 'message': line})}\n\n"
+            elif 'Обрабатывается:' in line:
+                parts = line.split('Обрабатывается:')
+                if len(parts) > 1:
+                    table = parts[1].strip()
+                    yield f"data: {json.dumps({'type': 'progress', 'table': table, 'total_types': total_types, 'message': line})}\n\n"
+            elif 'Получено' in line or 'Не удалось получить данные' in line:
+                yield f"data: {json.dumps({'type': 'result', 'message': line})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'log', 'message': line})}\n\n"
+    finally:
+        heartbeat_stop.set()
+        if worker_thread.is_alive():
+            worker_thread.join(timeout=5)
+
+
 @app.route('/api/sync_stream')
 def sync_stream():
     session_id = request.args.get('session_id')
-    session_data = _sessions.get(session_id)
-    if not session_data:
-        return Response(
-            f"data: {json.dumps({'error': 'Сессия не найдена. Загрузите файл заново.'})}\n\n",
-            mimetype='text/event-stream'
-        )
-    xml_path = session_data['xml_path']
+    with _sessions_lock:
+        session_data = _sessions.get(session_id)
+        if not session_data:
+            return Response(
+                f"data: {json.dumps({'type': 'error', 'message': 'Сессия не найдена. Загрузите файл заново.'})}\n\n",
+                mimetype='text/event-stream'
+            )
+        xml_path = session_data['xml_path']
     if not xml_path or not os.path.exists(xml_path):
         return Response(
-            f"data: {json.dumps({'error': 'XML файл не найден'})}\n\n",
+            f"data: {json.dumps({'type': 'error', 'message': 'XML файл не найден'})}\n\n",
             mimetype='text/event-stream'
         )
     return Response(
         stream_with_context(sync_db_stream(xml_path)),
-        mimetype='text/event-stream'
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',  # отключает буферизацию в nginx
+        }
     )
+
 
 @app.route('/api/guid_types')
 def api_guid_types():
     try:
         conn = get_db_connection()
-        cursor = conn.execute("SELECT DISTINCT type FROM objects ORDER BY type")
-        types = [row[0] for row in cursor.fetchall()]
+        types = [row[0] for row in conn.execute("SELECT DISTINCT type FROM objects ORDER BY type").fetchall()]
         conn.close()
         return jsonify({'types': types})
     except Exception as e:
         logger.error(f"Ошибка в guid_types: {e}")
         return jsonify({'error': str(e)}), 500
 
+
 if __name__ == '__main__':
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
-    app.run(debug=debug, host='0.0.0.0', port=5000)
+    host = os.environ.get('FLASK_HOST', '127.0.0.1')
+    port = int(os.environ.get('FLASK_PORT', 5000))
+    app.run(debug=debug, host=host, port=port)

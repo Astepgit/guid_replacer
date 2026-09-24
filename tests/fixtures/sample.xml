@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<V8Exch:Data xmlns:V8Exch="http://www.1c.ru/V8/1CV8DtUD/"
+            xmlns:v8="http://v8.1c.ru/8.1/data/enterprise/current-config"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <v8:CatalogObject.Номенклатура>
+    <v8:Ref>aaaaaaaa-1111-1111-1111-111111111111</v8:Ref>
+    <v8:Description>Товар А</v8:Description>
+    <v8:Code>00001</v8:Code>
+    <v8:IsFolder>false</v8:IsFolder>
+    <v8:Parent>00000000-0000-0000-0000-000000000000</v8:Parent>
+    <v8:Owner>00000000-0000-0000-0000-000000000000</v8:Owner>
+  </v8:CatalogObject.Номенклатура>
+  <v8:CatalogObject.Контрагенты>
+    <v8:Ref>bbbbbbbb-2222-2222-2222-222222222222</v8:Ref>
+    <v8:Description>ООО Ромашка</v8:Description>
+    <v8:Code>00002</v8:Code>
+    <v8:IsFolder>true</v8:IsFolder>
+    <v8:Parent>00000000-0000-0000-0000-000000000000</v8:Parent>
+  </v8:CatalogObject.Контрагенты>
+  <v8:DocumentObject.РеализацияТоваров>
+    <v8:Ref>cccccccc-3333-3333-3333-333333333333</v8:Ref>
+    <v8:Description>Документ 1</v8:Description>
+    <v8:Code>00003</v8:Code>
+  </v8:DocumentObject.РеализацияТоваров>
+</V8Exch:Data>

@@ -214,7 +214,9 @@
         .repl-arrow { color: #94a3b8; font-size: 18px; margin: 0 4px; }
         .btn-icon { background: none; border: none; cursor: pointer; color: #64748b; font-size: 16px; transition: color 0.2s; }
         .btn-icon:hover { color: #3b82f6; }
-        .text-muted { color: #94a3b8; }
+        .text-muted { color: #64748b; }
+        /* S3.14: WCAG AA — повышаем контраст с #94a3b8 (2.85:1) до #64748b (4.7:1) */
+        .text-muted-aa { color: #64748b; }
         .type-catalog { background: #dbeafe; color: #1e40af; }
         .type-document { background: #fce7f3; color: #9d174d; }
         .type-chart { background: #d1fae5; color: #065f46; }
@@ -288,15 +290,24 @@
         <button id="uploadBtn" class="btn btn-primary"><i class="fas fa-upload"></i> Загрузить</button>
     </div>
 
-    <div id="status" class="status"></div>
-
-    <div class="tabs">
-        <button class="tab active" data-tab="objects"><i class="fas fa-list-ul"></i> Объекты из XML</button>
-        <button class="tab" data-tab="replacements"><i class="fas fa-exchange-alt"></i> Замены GUID</button>
-        <button class="tab" data-tab="guid_db"><i class="fas fa-database"></i> База GUID (1С)</button>
+    <!-- S3.8: Empty state hero-блок, показывается до первой загрузки XML -->
+    <div id="emptyState" class="empty-state" style="text-align:center; padding:60px 20px; color:#64748b;">
+        <i class="fas fa-file-import" style="font-size:48px; color:#cbd5e1; margin-bottom:16px;"></i>
+        <h3 style="margin:0 0 8px 0; color:#1e293b; font-weight:600;">Загрузите XML-файл выгрузки 1С</h3>
+        <p style="margin:0 0 16px 0;">Перетащите файл в область выше или нажмите «Выбрать файл»</p>
+        <p style="margin:0; font-size:13px; color:#94a3b8;">После загрузки вы увидите список объектов и сможете запустить автозамену GUID</p>
     </div>
 
-    <div id="tab-objects" class="tab-pane active">
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+
+    <!-- S3.9: добавлены ARIA-роли для табов -->
+    <div class="tabs" role="tablist" aria-label="Основные разделы">
+        <button class="tab active" data-tab="objects" role="tab" id="tab-objects-btn" aria-selected="true" aria-controls="tab-objects"><i class="fas fa-list-ul"></i> Объекты из XML</button>
+        <button class="tab" data-tab="replacements" role="tab" id="tab-replacements-btn" aria-selected="false" aria-controls="tab-replacements"><i class="fas fa-exchange-alt"></i> Замены GUID</button>
+        <button class="tab" data-tab="guid_db" role="tab" id="tab-guid_db-btn" aria-selected="false" aria-controls="tab-guid_db"><i class="fas fa-database"></i> База GUID (1С)</button>
+    </div>
+
+    <div id="tab-objects" class="tab-pane active" role="tabpanel" aria-labelledby="tab-objects-btn">
         <div id="resultArea" style="display: none;">
             <div class="result-area">
                 <div class="toolbar">
@@ -346,7 +357,7 @@
         </div>
     </div>
 
-    <div id="tab-replacements" class="tab-pane">
+    <div id="tab-replacements" class="tab-pane" role="tabpanel" aria-labelledby="tab-replacements-btn">
         <div class="result-area">
             <div class="toolbar">
                 <div class="search-box">
@@ -375,7 +386,7 @@
         </div>
     </div>
 
-    <div id="tab-guid_db" class="tab-pane">
+    <div id="tab-guid_db" class="tab-pane" role="tabpanel" aria-labelledby="tab-guid_db-btn">
         <div class="result-area">
             <div class="toolbar">
                 <div class="search-box">
@@ -438,12 +449,14 @@
     let objPerPage = 100;
     let replacedGuids = new Set(); // GUID, которые были заменены
     let replacementLog = []; // {type, description, oldGuid, newGuid, isFolder}
+    let isSyncing = false; // S1.7: блокировка повторных запусков синхронизации
 
     // ---- DOM элементы ----
     const statusDiv = document.getElementById('status');
     const fileInput = document.getElementById('fileInput');
     const uploadBtn = document.getElementById('uploadBtn');
     const resultArea = document.getElementById('resultArea');
+    const emptyState = document.getElementById('emptyState');
     const objectsBody = document.getElementById('objectsBody');
     const objectCount = document.getElementById('objectCount');
     const searchInput = document.getElementById('searchInput');
@@ -456,6 +469,46 @@
     const progressBar = document.getElementById('progressBar');
     const syncInfo = document.getElementById('syncInfo');
     const syncInfoText = document.getElementById('syncInfoText');
+
+    // ---- S1.3: XSS-защита ----
+    // Все данные из 1С/XML экранируются перед вставкой в innerHTML.
+    // 1С не запрещает символы <, >, & в наименованиях справочников, поэтому
+    // вставка через innerHTML без экранирования = потенциальный XSS.
+    function escapeHtml(s) {
+        if (s === null || s === undefined) return '';
+        return String(s).replace(/[&<>"']/g, function(c) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[c];
+        });
+    }
+
+    // ---- S3.12: Toast-уведомления вместо alert() ----
+    // Простая реализация: создаёт временный div в углу экрана,
+    // авто-скрывается через 3с, не блокирует UI как alert().
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.style.cssText = [
+            'position:fixed', 'top:20px', 'right:20px', 'z-index:9999',
+            'padding:12px 20px', 'border-radius:8px', 'box-shadow:0 4px 12px rgba(0,0,0,0.15)',
+            'font-size:14px', 'font-weight:600', 'max-width:400px',
+            'background:' + (type === 'error' ? '#fee2e2' : type === 'success' ? '#dcfce7' : '#e0f2fe'),
+            'color:' + (type === 'error' ? '#b91c1c' : type === 'success' ? '#15803d' : '#0369a1'),
+            'border-left:4px solid ' + (type === 'error' ? '#ef4444' : type === 'success' ? '#22c55e' : '#3b82f6')
+        ].join(';') + ';';
+        toast.setAttribute('role', 'alert');
+        toast.textContent = message; // textContent = безопасно от XSS
+        document.body.appendChild(toast);
+        setTimeout(function() {
+            toast.style.transition = 'opacity 0.3s';
+            toast.style.opacity = '0';
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 3000);
+    }
 
     // ---- Вспомогательные функции ----
     function showStatus(message, type = 'info') {
@@ -530,12 +583,14 @@
             currentFilename = data.filename || '';
             sessionId = data.session_id || '';
             objPage = 1;
-            showStatus('✅ Найдено объектов: ' + currentObjects.length, 'success');
+            showStatus('<i class="fas fa-check-circle"></i> Найдено объектов: ' + currentObjects.length, 'success');
             renderTable(currentObjects);
             resultArea.style.display = 'block';
+            // S3.8: прячем empty state после первой успешной загрузки
+            if (emptyState) emptyState.style.display = 'none';
         })
         .catch(error => {
-            showStatus('❌ Ошибка загрузки: ' + error.message, 'error');
+            showStatus('<i class="fas fa-times-circle"></i> Ошибка загрузки: ' + escapeHtml(error.message), 'error');
         })
         .finally(() => {
             uploadBtn.disabled = false;
@@ -558,6 +613,11 @@
     let syncDone = false;
 
     function startSync() {
+        // S1.7: блокируем повторные запуски синхронизации
+        if (isSyncing) return;
+        isSyncing = true;
+        syncDbBtn.disabled = true;
+        syncDbBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Синхронизация...';
         if (eventSource) {
             eventSource.close();
             eventSource = null;
@@ -576,14 +636,20 @@
         eventSource.onmessage = function(e) {
             try {
                 const data = JSON.parse(e.data);
-                console.log('SSE data:', data);
-
+                // S3.15: убрали console.log из production
                 if (data.type === 'total') {
                     syncTotalTypes = data.total_types || 0;
                 } else if (data.type === 'progress') {
-                    syncInfoText.innerHTML = 'Синхронизация запущена... Обрабатывается: <span style="color:#3b82f6; font-weight:600;">' + (data.table || '—') + '</span>';
+                    // S1.3: экранируем data.table (взятую из 1С) при вставке в innerHTML
+                    const tableSpan = document.createElement('span');
+                    tableSpan.style.cssText = 'color:#3b82f6; font-weight:600;';
+                    tableSpan.textContent = data.table || '—';
+                    syncInfoText.innerHTML = '';
+                    syncInfoText.appendChild(document.createTextNode('Синхронизация запущена... Обрабатывается: '));
+                    syncInfoText.appendChild(tableSpan);
                     processed++;
-                    const total = syncTotalTypes || 28;
+                    // S3.15: fallback || 28 бессмысленен при 0 типов; используем processed как базу
+                    const total = syncTotalTypes || processed || 1;
                     const percent = Math.min(Math.round((processed / total) * 100), 95);
                     setProgress(percent, data.table || 'Обработка...');
                 } else if (data.type === 'done') {
@@ -595,27 +661,49 @@
                     loadGuidData();
                     loadGuidTypes();
                     setTimeout(hideProgress, 3000);
+                    // S1.7: разблокируем кнопку
+                    isSyncing = false;
+                    syncDbBtn.disabled = false;
+                    syncDbBtn.innerHTML = '<i class="fas fa-sync"></i> Синхронизировать';
                 } else if (data.type === 'error') {
-                    syncInfoText.innerHTML = '<span style="color:#b91c1c;">Ошибка: ' + data.message + '</span>';
+                    // S1.3: экранируем data.message
+                    const errSpan = document.createElement('span');
+                    errSpan.style.color = '#b91c1c';
+                    errSpan.textContent = 'Ошибка: ' + (data.message || '');
+                    syncInfoText.innerHTML = '';
+                    syncInfoText.appendChild(errSpan);
                     eventSource.close();
                     eventSource = null;
                     setTimeout(hideProgress, 5000);
+                    // S1.7: разблокируем кнопку при ошибке
+                    isSyncing = false;
+                    syncDbBtn.disabled = false;
+                    syncDbBtn.innerHTML = '<i class="fas fa-sync"></i> Синхронизировать';
                 }
             } catch (err) {
-                console.error('Ошибка парсинга SSE:', err);
+                // S3.15: заменили console.error на showToast
+                showToast('Ошибка обработки данных синхронизации', 'error');
             }
         };
 
-        eventSource.onerror = function(e) {
-            console.error('SSE ошибка:', e);
+        eventSource.onerror = function() {
+            // S3.15: убрали console.error
             // Игнорируем ошибку, если синхронизация уже завершилась успешно
             if (syncDone) return;
             if (eventSource) {
                 eventSource.close();
                 eventSource = null;
             }
-            syncInfoText.innerHTML = '<span style="color:#b91c1c;">Ошибка соединения при синхронизации</span>';
+            const errSpan = document.createElement('span');
+            errSpan.style.color = '#b91c1c';
+            errSpan.textContent = 'Ошибка соединения при синхронизации';
+            syncInfoText.innerHTML = '';
+            syncInfoText.appendChild(errSpan);
             setTimeout(hideProgress, 5000);
+            // S1.7: разблокируем кнопку при ошибке соединения
+            isSyncing = false;
+            syncDbBtn.disabled = false;
+            syncDbBtn.innerHTML = '<i class="fas fa-sync"></i> Синхронизировать';
         };
     }
 
@@ -637,7 +725,7 @@
 
         objectsBody.innerHTML = '';
         if (!pageObjects || pageObjects.length === 0) {
-            objectsBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#94a3b8;">Нет объектов для отображения</td></tr>';
+            objectsBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#64748b;">Нет объектов для отображения</td></tr>';
         }
         // Нужно использовать индекс из полного массива, а не из страницы
         pageObjects.forEach((obj) => {
@@ -645,25 +733,28 @@
             const tr = document.createElement('tr');
             const typeStr = obj._type || 'Объект';
             const typeClass = getTypeClass(typeStr);
-            const typeBadge = `<span class="badge ${typeClass}">${typeStr}</span>`;
+            // S1.3: экранируем typeStr, взятый из XML-тега
+            const typeBadge = `<span class="badge ${typeClass}">${escapeHtml(typeStr)}</span>`;
             let folderBadge = '';
             if (obj.IsFolder !== undefined) {
                 folderBadge = obj.IsFolder ? '<span class="badge badge-success">Да</span>' : '<span class="badge badge-secondary">Нет</span>';
             }
             const isReplaced = replacedGuids.has(obj.Ref);
             if (isReplaced) tr.classList.add('row-replaced');
+            // S1.3: экранируем GUID в title и тексте
             const guidBadge = isReplaced
-                ? `<code class="badge-guid badge-replaced" title="GUID заменён: ${obj.Ref}">${obj.Ref || ''}</code>`
-                : `<code class="badge-guid" title="${obj.Ref || ''}">${obj.Ref || ''}</code>`;
-            const actions = `<button class="btn-icon replace-btn" data-index="${globalIndex}" title="Заменить GUID"><i class="fas fa-edit"></i></button>`;
+                ? `<code class="badge-guid badge-replaced" title="GUID заменён: ${escapeHtml(obj.Ref)}">${escapeHtml(obj.Ref || '')}</code>`
+                : `<code class="badge-guid" title="${escapeHtml(obj.Ref || '')}">${escapeHtml(obj.Ref || '')}</code>`;
+            const actions = `<button class="btn-icon replace-btn" data-index="${globalIndex}" title="Заменить GUID" aria-label="Заменить GUID"><i class="fas fa-edit"></i></button>`;
+            // S1.3: экранируем Description, Code, Parent, Owner
             tr.innerHTML = `
                 <td>${typeBadge}</td>
                 <td>${guidBadge}</td>
-                <td>${obj.Description || ''}</td>
-                <td>${obj.Code || ''}</td>
+                <td>${escapeHtml(obj.Description || '')}</td>
+                <td>${escapeHtml(obj.Code || '')}</td>
                 <td>${folderBadge}</td>
-                <td>${obj.Parent ? `<code class="badge-guid" title="${obj.Parent}">${obj.Parent}</code>` : ''}</td>
-                <td>${obj.Owner ? `<code class="badge-guid" title="${obj.Owner}">${obj.Owner}</code>` : ''}</td>
+                <td>${obj.Parent ? `<code class="badge-guid" title="${escapeHtml(obj.Parent)}">${escapeHtml(obj.Parent)}</code>` : ''}</td>
+                <td>${obj.Owner ? `<code class="badge-guid" title="${escapeHtml(obj.Owner)}">${escapeHtml(obj.Owner)}</code>` : ''}</td>
                 <td>${actions}</td>
             `;
             objectsBody.appendChild(tr);
@@ -674,14 +765,16 @@
                 const obj = currentObjects[idx];
                 const oldGuid = obj.Ref;
                 if (!oldGuid) {
-                    alert('У объекта нет GUID для замены.');
+                    // S3.12: showToast вместо alert()
+                    showToast('У объекта нет GUID для замены.', 'error');
                     return;
                 }
                 const newGuid = prompt('Введите новый GUID:', oldGuid);
                 if (newGuid && newGuid !== oldGuid) {
                     const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
                     if (!guidRegex.test(newGuid)) {
-                        alert('Неверный формат GUID. Ожидается: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx');
+                        // S3.12: showToast вместо alert()
+                        showToast('Неверный формат GUID. Ожидается: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', 'error');
                         return;
                     }
                     replacementLog.push({
@@ -694,7 +787,7 @@
                     obj.Ref = newGuid;
                     replacedGuids.add(newGuid);
                     renderTable(currentObjects);
-                    showStatus('🔄 GUID заменён в памяти. Для сохранения нажмите "Скачать XML".', 'info');
+                    showStatus('<i class="fas fa-info-circle"></i> GUID заменён в памяти. Для сохранения нажмите "Скачать XML".', 'info');
                 }
             });
         });
@@ -727,7 +820,7 @@
                    (obj._type && obj._type.toLowerCase().includes(query));
         });
         renderTable(filtered);
-        showStatus(`🔍 Найдено ${filtered.length} объектов`, 'info');
+        showStatus(`<i class="fas fa-search"></i> Найдено ${filtered.length} объектов`, 'info');
         setTimeout(hideStatus, 3000);
     }
 
@@ -804,16 +897,18 @@
                     }
                 });
             }
-            const msg = `✅ Автозамена: заменено ${replaced}, не найдено в БД ${stats.not_found || 0}, уже совпадало ${stats.already_matched || 0}, без описания ${stats.no_description || 0}`;
+            // S3.15: унификация эмодзи на FontAwesome иконки
+            const msg = `<i class="fas fa-check-circle"></i> Автозамена: заменено ${replaced}, не найдено в БД ${stats.not_found || 0}, уже совпадало ${stats.already_matched || 0}, без описания ${stats.no_description || 0}`;
             if (replaced > 0) {
                 showStatus(msg, 'success');
             } else {
-                showStatus(`ℹ️ ${msg.replace('✅ ', '')}`, 'info');
+                showStatus(`<i class="fas fa-info-circle"></i> Автозамена: заменено ${replaced}, не найдено в БД ${stats.not_found || 0}, уже совпадало ${stats.already_matched || 0}, без описания ${stats.no_description || 0}`, 'info');
             }
             renderTable(currentObjects);
         })
         .catch(error => {
-            showStatus('❌ Ошибка автозамены: ' + error.message, 'error');
+            // S1.3: экранируем сообщение об ошибке
+            showStatus('<i class="fas fa-times-circle"></i> Ошибка автозамены: ' + escapeHtml(error.message), 'error');
         })
         .finally(() => {
             autoReplaceBtn.disabled = false;
@@ -826,7 +921,7 @@
         const tbody = document.getElementById('replBody');
         const countEl = document.getElementById('replCount');
         if (!items || items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#94a3b8;">Замены пока не выполнялись. Используйте «Автозамена» на вкладке «Объекты из XML».</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#64748b;">Замены пока не выполнялись. Используйте «Автозамена» на вкладке «Объекты из XML».</td></tr>';
             countEl.textContent = '0 замен';
             return;
         }
@@ -834,13 +929,14 @@
         items.forEach(item => {
             const tr = document.createElement('tr');
             const typeClass = getTypeClass(item.type);
-            const typeBadge = `<span class="badge ${typeClass}">${item.type}</span>`;
+            // S1.3: экранируем все данные пользователя
+            const typeBadge = `<span class="badge ${typeClass}">${escapeHtml(item.type)}</span>`;
             const folderBadge = item.isFolder ? '<span class="badge badge-success">Да</span>' : '<span class="badge badge-secondary">Нет</span>';
             tr.innerHTML = `
                 <td>${typeBadge}</td>
-                <td>${item.description}</td>
-                <td><code class="badge-guid" style="background:#fee2e2; color:#b91c1c;" title="${item.oldGuid}">${item.oldGuid}</code></td>
-                <td><code class="badge-guid" style="background:#dcfce7; color:#166534;" title="${item.newGuid}">${item.newGuid}</code></td>
+                <td>${escapeHtml(item.description)}</td>
+                <td><code class="badge-guid" style="background:#fee2e2; color:#b91c1c;" title="${escapeHtml(item.oldGuid)}">${escapeHtml(item.oldGuid)}</code></td>
+                <td><code class="badge-guid" style="background:#dcfce7; color:#166534;" title="${escapeHtml(item.newGuid)}">${escapeHtml(item.newGuid)}</code></td>
                 <td>${folderBadge}</td>
             `;
             tbody.appendChild(tr);
@@ -869,18 +965,42 @@
     });
 
     // ---- Вкладки ----
+    // S3.9: добавлена keyboard navigation (стрелки влево/вправо)
+    function activateTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => {
+            t.classList.remove('active');
+            t.setAttribute('aria-selected', 'false');
+            t.setAttribute('tabindex', '-1');
+        });
+        tab.classList.add('active');
+        tab.setAttribute('aria-selected', 'true');
+        tab.setAttribute('tabindex', '0');
+        tab.focus();
+        const tabId = tab.dataset.tab;
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        document.getElementById('tab-' + tabId).classList.add('active');
+        if (tabId === 'guid_db') {
+            loadGuidTypes();
+            loadGuidData();
+        } else if (tabId === 'replacements') {
+            renderReplTable(replacementLog);
+        }
+    }
     document.querySelectorAll('.tab').forEach(tab => {
-        tab.addEventListener('click', function() {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            this.classList.add('active');
-            const tabId = this.dataset.tab;
-            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-            document.getElementById('tab-' + tabId).classList.add('active');
-            if (tabId === 'guid_db') {
-                loadGuidTypes();
-                loadGuidData();
-            } else if (tabId === 'replacements') {
-                renderReplTable(replacementLog);
+        tab.setAttribute('tabindex', tab.classList.contains('active') ? '0' : '-1');
+        tab.addEventListener('click', function() { activateTab(this); });
+        // S3.9: обработка клавиш ArrowLeft/ArrowRight/Home/End
+        tab.addEventListener('keydown', function(e) {
+            const tabs = Array.from(document.querySelectorAll('.tab'));
+            const currentIdx = tabs.indexOf(this);
+            let newIdx = null;
+            if (e.key === 'ArrowRight') newIdx = (currentIdx + 1) % tabs.length;
+            else if (e.key === 'ArrowLeft') newIdx = (currentIdx - 1 + tabs.length) % tabs.length;
+            else if (e.key === 'Home') newIdx = 0;
+            else if (e.key === 'End') newIdx = tabs.length - 1;
+            if (newIdx !== null) {
+                e.preventDefault();
+                activateTab(tabs[newIdx]);
             }
         });
     });
@@ -903,7 +1023,7 @@
             });
             if (currentVal) select.value = currentVal;
         })
-        .catch(e => console.error('Ошибка загрузки типов:', e));
+        .catch(e => showToast('Ошибка загрузки типов: ' + e.message, 'error'));
     }
 
     function loadGuidData() {
@@ -920,7 +1040,8 @@
             updatePagination();
         })
         .catch(e => {
-            document.getElementById('guidBody').innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#ef4444;">Ошибка загрузки: ${e.message}</td></tr>`;
+            // S1.3: экранируем сообщение об ошибке
+            document.getElementById('guidBody').innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#ef4444;">Ошибка загрузки: ${escapeHtml(e.message)}</td></tr>`;
         });
     }
 
@@ -945,7 +1066,7 @@
     function renderGuidTable(rows) {
         const tbody = document.getElementById('guidBody');
         if (!rows || rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#94a3b8;">Нет записей. Нажмите "Синхронизировать" для загрузки данных из 1С.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:#64748b;">Нет записей. Нажмите "Синхронизировать" для загрузки данных из 1С.</td></tr>';
             document.getElementById('guidCount').textContent = '0 записей';
             return;
         }
@@ -953,13 +1074,14 @@
         rows.forEach(row => {
             const tr = document.createElement('tr');
             const typeClass = getTypeClass(row.type);
-            const typeBadge = `<span class="badge ${typeClass}">${row.type || ''}</span>`;
-            const copyBtn = `<button class="btn-icon copy-guid-btn" data-guid="${row.guid}" title="Скопировать GUID"><i class="fas fa-copy"></i></button>`;
+            // S1.3: экранируем type, name, guid
+            const typeBadge = `<span class="badge ${typeClass}">${escapeHtml(row.type || '')}</span>`;
+            const copyBtn = `<button class="btn-icon copy-guid-btn" data-guid="${escapeHtml(row.guid)}" title="Скопировать GUID" aria-label="Скопировать GUID"><i class="fas fa-copy"></i></button>`;
             const folderBadge = row.is_folder ? '<span class="badge badge-success">Да</span>' : '<span class="badge badge-secondary">Нет</span>';
             tr.innerHTML = `
                 <td>${typeBadge}</td>
-                <td>${row.name || ''}</td>
-                <td><code class="badge-guid" title="${row.guid || ''}">${row.guid || ''}</code></td>
+                <td>${escapeHtml(row.name || '')}</td>
+                <td><code class="badge-guid" title="${escapeHtml(row.guid || '')}">${escapeHtml(row.guid || '')}</code></td>
                 <td>${folderBadge}</td>
                 <td>${copyBtn}</td>
             `;
@@ -1023,7 +1145,7 @@
 
     syncDbBtn.addEventListener('click', function() {
         if (!currentFilename) {
-            showStatus('Сначала загрузите XML-файл.', 'error');
+            showToast('Сначала загрузите XML-файл.', 'error');
             return;
         }
         if (!confirm('Синхронизация удалит текущую базу GUID и загрузит новые данные из 1С.\n\nПродолжить?')) {
@@ -1039,7 +1161,7 @@
         }
         downloadBtn.disabled = true;
         downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Генерация...';
-        showStatus('⏳ Генерация XML...', 'info');
+        showStatus('<i class="fas fa-hourglass-half"></i> Генерация XML...', 'info');
         fetch('/api/download', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1056,10 +1178,10 @@
             link.href = URL.createObjectURL(blob);
             link.download = currentFilename ? currentFilename.replace(/\.xml$/i, '') + '_modified.xml' : 'modified.xml';
             link.click();
-            showStatus('✅ XML файл успешно скачан!', 'success');
+            showStatus('<i class="fas fa-check-circle"></i> XML файл успешно скачан!', 'success');
         })
         .catch(error => {
-            showStatus('❌ Ошибка скачивания: ' + error.message, 'error');
+            showStatus('<i class="fas fa-times-circle"></i> Ошибка скачивания: ' + escapeHtml(error.message), 'error');
         })
         .finally(() => {
             downloadBtn.disabled = false;
@@ -1067,7 +1189,9 @@
         });
     });
 
-    console.log('Страница загружена. Ожидание действий пользователя.');
+    // S3.15: убран финальный console.log из production
+    // Инициализация пустого состояния и регистрация service worker (опционально)
+    // может быть добавлена здесь, если потребуется.
 </script>
 </body>
 </html>

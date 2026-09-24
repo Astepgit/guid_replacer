@@ -1,0 +1,65 @@
+[project]
+name = "guid_replacer"
+version = "0.1.0"
+description = "Веб-приложение для замены GUID в XML-выгрузках 1С"
+requires-python = ">=3.8"
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+exclude = ["tests/fixtures", ".venv", "build", "dist"]
+
+[tool.ruff.lint]
+# Включаем основные группы правил
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+# Игнорируем специфичные для проекта вещи
+ignore = [
+    "E501",   # длина строки (решает black)
+    "B008",   # function call in default argument (нужно для Flask)
+    "UP007",  # Optional[X] вместо X | None (только Python 3.10+)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B017"]  # allow pytest.raises(Exception)
+
+[tool.black]
+line-length = 120
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | build
+  | dist
+  | tests/fixtures
+)/
+'''
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = false
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["tests/fixtures/"]

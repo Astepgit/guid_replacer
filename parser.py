@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 Парсер структуры объектов из XML-выгрузки 1С.
 Использует общий модуль parsing.py.
 """
 
-import sys
 import json
+import sys
+
 from parsing import parse_xml
 
 
