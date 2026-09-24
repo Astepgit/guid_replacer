@@ -12,9 +12,7 @@ venv/
 guid_cache.db
 uploads/
 *.log
+*.zip
 
 # Тестовые файлы
 for_upload-*.xml
-*.env.old
-.env*
-*.png
