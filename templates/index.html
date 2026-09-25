@@ -267,25 +267,384 @@
             opacity: 0.4;
             cursor: not-allowed;
         }
+        /* UX2: Diff view «было/стало» в строке таблицы */
+        .guid-diff {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+            max-width: 100%;
+        }
+        .guid-diff .old-guid {
+            text-decoration: line-through;
+            color: #94a3b8;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .guid-diff .repl-arrow-mini {
+            color: #3b82f6;
+            font-size: 12px;
+        }
+        /* UX3: Pre-upload — превью файла */
+        .file-meta {
+            font-size: 12px;
+            color: #64748b;
+            margin-left: 8px;
+        }
+        .file-meta .size-too-big { color: #dc2626; font-weight: 600; }
+        /* UX4: Модальное окно confirm */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            backdrop-filter: blur(2px);
+        }
+        .modal-backdrop.active { display: flex; }
+        .modal {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 480px;
+            width: 90%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+            animation: modalIn 0.2s ease-out;
+        }
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .modal h3 { margin: 0 0 12px 0; font-size: 18px; }
+        .modal p { margin: 0 0 16px 0; color: #475569; line-height: 1.5; }
+        .modal .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        /* UX5: Skeleton loader */
+        .skeleton-row td {
+            padding: 10px 14px !important;
+        }
+        .skeleton-block {
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 4px;
+            height: 14px;
+            display: inline-block;
+            width: 100%;
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        .skeleton-block.short { width: 60%; }
+        .skeleton-block.medium { width: 80%; }
+        /* UX6: Bulk edit — чекбоксы в первой колонке */
+        .bulk-checkbox {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        .row-selected td { background: #dbeafe !important; }
+        .row-selected:hover td { background: #bfdbfe !important; }
+        .bulk-toolbar {
+            display: none;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 10px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .bulk-toolbar.active { display: flex; }
+        /* UX7: Inline-редактирование GUID */
+        .guid-input {
+            font-family: monospace;
+            font-size: 12px;
+            padding: 2px 6px;
+            border: 2px solid #3b82f6;
+            border-radius: 4px;
+            outline: none;
+            width: 280px;
+            background: white;
+        }
+        .guid-input.invalid {
+            border-color: #ef4444;
+            background: #fef2f2;
+        }
+        .guid-input.valid {
+            border-color: #22c55e;
+            background: #f0fdf4;
+        }
+        /* UX9: Сортировка колонок */
+        th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+        th.sortable:hover { background: #e2e8f0; }
+        th.sortable .sort-icon {
+            color: #94a3b8;
+            font-size: 11px;
+            margin-left: 4px;
+        }
+        th.sortable.sorted-asc .sort-icon,
+        th.sortable.sorted-desc .sort-icon {
+            color: #3b82f6;
+        }
+        /* UX10: Карточный режим для мобильных */
+        .object-card {
+            display: none;
+            background: white;
+            border-radius: 12px;
+            padding: 14px 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            margin-bottom: 10px;
+            border-left: 4px solid #3b82f6;
+        }
+        /* UX14: Diff-viewer для XML */
+        .diff-container {
+            display: flex;
+            gap: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+            max-height: 600px;
+        }
+        .diff-pane {
+            flex: 1;
+            overflow: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            background: var(--bg-card);
+        }
+        .diff-pane .pane-header {
+            background: #f1f5f9;
+            padding: 8px 12px;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid #e2e8f0;
+            color: var(--text-primary);
+        }
+        .diff-pane pre {
+            margin: 0;
+            padding: 8px 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .diff-line {
+            padding: 2px 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .diff-line.changed-old { background: #fef2f2; color: #b91c1c; }
+        .diff-line.changed-new { background: #f0fdf4; color: #15803d; }
+        .diff-line.unchanged { color: var(--text-muted); }
+        .diff-line.line-num {
+            display: inline-block;
+            width: 40px;
+            color: #94a3b8;
+            user-select: none;
+        }
+        .object-card .card-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            font-size: 13px;
+        }
+        .object-card .card-label {
+            color: #64748b;
+            font-weight: 600;
+            margin-right: 12px;
+            min-width: 80px;
+        }
+        .object-card .card-value {
+            text-align: right;
+            word-break: break-all;
+        }
+        /* UX15: Тёмная тема через CSS variables */
+        :root {
+            --bg-primary: #f5f7fa;
+            --bg-card: white;
+            --text-primary: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --accent: #3b82f6;
+        }
+        [data-theme="dark"] {
+            --bg-primary: #0f172a;
+            --bg-card: #1e293b;
+            --text-primary: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --accent: #60a5fa;
+        }
+        body { background: var(--bg-primary); color: var(--text-primary); }
+        .result-area, .upload-card { background: var(--bg-card); }
+        th { background: var(--bg-primary); }
+        td { border-bottom-color: var(--border); }
+        .theme-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        /* UX16: Audit log panel */
+        .audit-log-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 10px 16px;
+            border-radius: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            z-index: 1000;
+        }
+        .audit-log-panel {
+            position: fixed;
+            bottom: 70px;
+            right: 20px;
+            width: 360px;
+            max-height: 400px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            display: none;
+            flex-direction: column;
+            z-index: 1001;
+        }
+        .audit-log-panel.active { display: flex; }
+        .audit-log-panel .header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+        }
+        .audit-log-panel .entries {
+            overflow-y: auto;
+            padding: 8px 0;
+            max-height: 320px;
+        }
+        .audit-log-entry {
+            padding: 8px 16px;
+            font-size: 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+        }
+        .audit-log-entry .time { color: var(--text-muted); font-family: monospace; min-width: 50px; }
+        /* UX17: Command palette (Cmd+K) */
+        .cmd-palette-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.5);
+            display: none;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 100px;
+            z-index: 10002;
+            backdrop-filter: blur(2px);
+        }
+        .cmd-palette-backdrop.active { display: flex; }
+        .cmd-palette {
+            background: var(--bg-card);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 560px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .cmd-palette input {
+            width: 100%;
+            padding: 14px 16px;
+            border: none;
+            border-bottom: 1px solid var(--border);
+            font-size: 15px;
+            background: transparent;
+            color: var(--text-primary);
+            outline: none;
+        }
+        .cmd-palette .results {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .cmd-palette .result-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+        .cmd-palette .result-item:hover,
+        .cmd-palette .result-item.selected {
+            background: var(--bg-primary);
+        }
+        .cmd-palette .result-source {
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+        .cmd-palette .empty {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-muted);
+        }
         @media (max-width: 700px) {
             .upload-card { flex-direction: column; align-items: stretch; }
             .toolbar { flex-direction: column; align-items: stretch; }
             .toolbar .search-box { max-width: 100%; }
             .toolbar .search-box select { max-width: 100%; }
+            /* UX10: на мобильных скрываем таблицу, показываем карточки */
+            .table-wrapper { display: none; }
+            .object-card { display: block; }
+            .pagination-bar { font-size: 12px; }
         }
     </style>
 </head>
 <body>
 <div class="container">
     <h1><i class="fas fa-exchange-alt"></i> Замена GUID в XML 1С</h1>
-    <p class="subtitle">Загрузите файл выгрузки, просмотрите объекты и замените идентификаторы</p>
+    <!-- UX15: переключатель темы -->
+    <button id="themeToggle" class="theme-toggle" title="Сменить тему" aria-label="Сменить тему">
+        <i class="fas fa-moon"></i>
+    </button>
+    <!-- UX17: подсказка про Cmd+K -->
+    <p class="subtitle">
+        Загрузите файл выгрузки, просмотрите объекты и замените идентификаторы.
+        <span class="text-muted" style="font-size:12px;">Нажмите <kbd>Ctrl+K</kbd> для глобального поиска</span>
+    </p>
 
     <div class="upload-card" id="uploadCard">
         <div class="file-area">
-            <i class="fas fa-cloud-upload-alt fa-lg" style="color:#3b82f6;"></i>
+            <i class="fas fa-cloud-upload-alt fa-lg" style="color:var(--accent);"></i>
             <input type="file" id="fileInput" accept=".xml" style="display:none;">
             <button id="fileBrowseBtn" class="btn btn-outline" style="margin:0;"><i class="fas fa-folder-open"></i> Выбрать файл</button>
             <span id="fileNameLabel" class="text-muted" style="font-size:14px;">Файл не выбран</span>
+            <!-- UX3: мета-информация о файле -->
+            <span id="fileMeta" class="file-meta" style="display:none;"></span>
         </div>
         <button id="uploadBtn" class="btn btn-primary"><i class="fas fa-upload"></i> Загрузить</button>
     </div>
@@ -304,6 +663,7 @@
     <div class="tabs" role="tablist" aria-label="Основные разделы">
         <button class="tab active" data-tab="objects" role="tab" id="tab-objects-btn" aria-selected="true" aria-controls="tab-objects"><i class="fas fa-list-ul"></i> Объекты из XML</button>
         <button class="tab" data-tab="replacements" role="tab" id="tab-replacements-btn" aria-selected="false" aria-controls="tab-replacements"><i class="fas fa-exchange-alt"></i> Замены GUID</button>
+        <button class="tab" data-tab="diff" role="tab" id="tab-diff-btn" aria-selected="false" aria-controls="tab-diff"><i class="fas fa-code-branch"></i> Сравнение</button>
         <button class="tab" data-tab="guid_db" role="tab" id="tab-guid_db-btn" aria-selected="false" aria-controls="tab-guid_db"><i class="fas fa-database"></i> База GUID (1С)</button>
     </div>
 
@@ -316,20 +676,32 @@
                         <input type="text" id="searchInput" placeholder="Поиск по GUID, описанию, коду, типу...">
                     </div>
                     <div class="actions">
+                        <!-- UX1: Undo/Redo -->
+                        <button id="undoBtn" class="btn btn-outline" disabled title="Отменить (Ctrl+Z)" aria-label="Отменить"><i class="fas fa-undo"></i></button>
+                        <button id="redoBtn" class="btn btn-outline" disabled title="Вернуть (Ctrl+Shift+Z)" aria-label="Вернуть"><i class="fas fa-redo"></i></button>
                         <button id="autoReplaceBtn" class="btn btn-purple"><i class="fas fa-magic"></i> Автозамена</button>
                         <button id="clearSearchBtn" class="btn btn-outline"><i class="fas fa-times"></i> Сброс</button>
                         <button id="downloadBtn" class="btn btn-success"><i class="fas fa-download"></i> Скачать XML</button>
+                    </div>
+                </div>
+                <!-- UX6: Bulk toolbar — показывается когда выбрано ≥1 строка -->
+                <div class="bulk-toolbar" id="bulkToolbar">
+                    <span id="bulkCount">0 выбрано</span>
+                    <div style="display:flex; gap:8px;">
+                        <button id="bulkReplaceBtn" class="btn btn-purple btn-sm"><i class="fas fa-edit"></i> Заменить выбранные</button>
+                        <button id="bulkClearBtn" class="btn btn-outline btn-sm"><i class="fas fa-times"></i> Снять выделение</button>
                     </div>
                 </div>
                 <div class="table-wrapper">
                     <table id="objectsTable">
                         <thead>
                             <tr>
-                                <th>Тип</th>
-                                <th>GUID</th>
-                                <th>Описание</th>
-                                <th>Код</th>
-                                <th>Группа</th>
+                                <th style="width:36px;"><input type="checkbox" id="selectAllCheckbox" class="bulk-checkbox" title="Выделить все на странице" aria-label="Выделить все"></th>
+                                <th class="sortable" data-sort="type">Тип <i class="fas fa-sort sort-icon"></i></th>
+                                <th class="sortable" data-sort="ref">GUID <i class="fas fa-sort sort-icon"></i></th>
+                                <th class="sortable" data-sort="description">Описание <i class="fas fa-sort sort-icon"></i></th>
+                                <th class="sortable" data-sort="code">Код <i class="fas fa-sort sort-icon"></i></th>
+                                <th class="sortable" data-sort="isFolder">Группа <i class="fas fa-sort sort-icon"></i></th>
                                 <th>Родитель</th>
                                 <th>Владелец</th>
                                 <th style="width:100px;">Действия</th>
@@ -338,6 +710,8 @@
                         <tbody id="objectsBody"></tbody>
                     </table>
                 </div>
+                <!-- UX10: контейнер для карточек на мобильных -->
+                <div id="objectsCards" class="objects-cards-container"></div>
                 <div class="pagination-bar" id="objectsPagination" style="display:none; margin-top:12px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
                     <div style="font-size:13px; color:#64748b;" id="objectCount">0 объектов</div>
                     <div style="display:flex; align-items:center; gap:6px;">
@@ -365,6 +739,9 @@
                     <input type="text" id="replSearchInput" placeholder="Поиск по типу, описанию, GUID...">
                 </div>
                 <div class="actions">
+                    <!-- UX11: Export замены в CSV/JSON -->
+                    <button id="exportCsvBtn" class="btn btn-outline" title="Экспорт в CSV"><i class="fas fa-file-csv"></i> CSV</button>
+                    <button id="exportJsonBtn" class="btn btn-outline" title="Экспорт в JSON"><i class="fas fa-file-code"></i> JSON</button>
                     <button id="clearReplSearchBtn" class="btn btn-outline"><i class="fas fa-times"></i> Сброс</button>
                 </div>
             </div>
@@ -383,6 +760,33 @@
                 </table>
             </div>
             <div id="replCount" style="margin-top:12px; font-size:13px; color:#64748b;">0 замен</div>
+        </div>
+    </div>
+
+    <div id="tab-diff" class="tab-pane" role="tabpanel" aria-labelledby="tab-diff-btn">
+        <div class="result-area">
+            <div class="toolbar">
+                <div style="font-size:14px; color:#1e293b;">
+                    <i class="fas fa-code-branch" style="color:#3b82f6;"></i>
+                    <b>Сравнение XML:</b> было → стало
+                </div>
+                <div class="actions">
+                    <button id="loadDiffBtn" class="btn btn-primary"><i class="fas fa-sync"></i> Обновить diff</button>
+                </div>
+            </div>
+            <div id="diffStats" style="margin-bottom:12px; font-size:13px; color:#64748b;">
+                Загрузите XML и выполните автозамену, чтобы увидеть различия.
+            </div>
+            <div class="diff-container" id="diffContainer" style="display:none;">
+                <div class="diff-pane">
+                    <div class="pane-header"><i class="fas fa-file"></i> Исходный</div>
+                    <pre id="diffOriginal"></pre>
+                </div>
+                <div class="diff-pane">
+                    <div class="pane-header"><i class="fas fa-file-alt"></i> Модифицированный</div>
+                    <pre id="diffModified"></pre>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -652,6 +1056,13 @@
                     const total = syncTotalTypes || processed || 1;
                     const percent = Math.min(Math.round((processed / total) * 100), 95);
                     setProgress(percent, data.table || 'Обработка...');
+                    // UX13: показываем ETA и количество обработанных типов
+                    if (data.processed_types !== undefined && data.total_types > 0) {
+                        const etaText = data.eta_seconds > 0
+                            ? `~${Math.ceil(data.eta_seconds / 60)} мин осталось`
+                            : 'почти готово';
+                        progressBar.title = `Обработано типов: ${data.processed_types} / ${data.total_types}. Прошло: ${data.elapsed_seconds}с. ${etaText}.`;
+                    }
                 } else if (data.type === 'done') {
                     syncDone = true;
                     setProgress(100, 'Готово!');
@@ -725,8 +1136,11 @@
 
         objectsBody.innerHTML = '';
         if (!pageObjects || pageObjects.length === 0) {
-            objectsBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#64748b;">Нет объектов для отображения</td></tr>';
+            objectsBody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:#64748b;">Нет объектов для отображения</td></tr>';
         }
+        // UX10: очищаем контейнер мобильных карточек
+        const objectsCards = document.getElementById('objectsCards');
+        if (objectsCards) objectsCards.innerHTML = '';
         // Нужно использовать индекс из полного массива, а не из страницы
         pageObjects.forEach((obj) => {
             const globalIndex = start + pageObjects.indexOf(obj);
@@ -741,15 +1155,31 @@
             }
             const isReplaced = replacedGuids.has(obj.Ref);
             if (isReplaced) tr.classList.add('row-replaced');
-            // S1.3: экранируем GUID в title и тексте
-            const guidBadge = isReplaced
-                ? `<code class="badge-guid badge-replaced" title="GUID заменён: ${escapeHtml(obj.Ref)}">${escapeHtml(obj.Ref || '')}</code>`
-                : `<code class="badge-guid" title="${escapeHtml(obj.Ref || '')}">${escapeHtml(obj.Ref || '')}</code>`;
+            if (selectedIndices && selectedIndices.has(globalIndex)) tr.classList.add('row-selected');
+            // UX2: diff view «было/стало» для заменённых GUID
+            let guidCell;
+            if (isReplaced) {
+                const oldGuid = getOldGuidForCurrent(obj.Ref);
+                if (oldGuid && oldGuid !== obj.Ref) {
+                    guidCell = `<div class="guid-diff">
+                        <code class="badge-guid badge-replaced" title="Старый GUID: ${escapeHtml(oldGuid)}">${escapeHtml(oldGuid)}</code>
+                        <i class="fas fa-arrow-right repl-arrow-mini"></i>
+                        <code class="badge-guid badge-replaced" title="Новый GUID">${escapeHtml(obj.Ref || '')}</code>
+                    </div>`;
+                } else {
+                    guidCell = `<code class="badge-guid badge-replaced" title="GUID заменён: ${escapeHtml(obj.Ref)}">${escapeHtml(obj.Ref || '')}</code>`;
+                }
+            } else {
+                guidCell = `<code class="badge-guid guid-badge-clickable" title="${escapeHtml(obj.Ref || '')}">${escapeHtml(obj.Ref || '')}</code>`;
+            }
+            // UX6: чекбокс выбора для bulk edit
+            const checkboxCell = `<input type="checkbox" class="bulk-checkbox row-checkbox" data-index="${globalIndex}" ${selectedIndices && selectedIndices.has(globalIndex) ? 'checked' : ''} aria-label="Выбрать объект">`;
             const actions = `<button class="btn-icon replace-btn" data-index="${globalIndex}" title="Заменить GUID" aria-label="Заменить GUID"><i class="fas fa-edit"></i></button>`;
             // S1.3: экранируем Description, Code, Parent, Owner
             tr.innerHTML = `
+                <td>${checkboxCell}</td>
                 <td>${typeBadge}</td>
-                <td>${guidBadge}</td>
+                <td>${guidCell}</td>
                 <td>${escapeHtml(obj.Description || '')}</td>
                 <td>${escapeHtml(obj.Code || '')}</td>
                 <td>${folderBadge}</td>
@@ -758,6 +1188,43 @@
                 <td>${actions}</td>
             `;
             objectsBody.appendChild(tr);
+
+            // UX10: добавляем карточку для мобильных
+            if (objectsCards) {
+                const card = document.createElement('div');
+                card.className = 'object-card';
+                if (isReplaced) card.style.borderLeftColor = '#f59e0b';
+                card.innerHTML = `
+                    <div class="card-row"><span class="card-label">Тип:</span><span class="card-value">${typeBadge}</span></div>
+                    <div class="card-row"><span class="card-label">GUID:</span><span class="card-value">${guidCell}</span></div>
+                    <div class="card-row"><span class="card-label">Описание:</span><span class="card-value">${escapeHtml(obj.Description || '—')}</span></div>
+                    <div class="card-row"><span class="card-label">Код:</span><span class="card-value">${escapeHtml(obj.Code || '—')}</span></div>
+                    <div class="card-row"><span class="card-label">Группа:</span><span class="card-value">${folderBadge || '—'}</span></div>
+                    ${obj.Parent ? `<div class="card-row"><span class="card-label">Родитель:</span><span class="card-value"><code class=\"badge-guid\">${escapeHtml(obj.Parent)}</code></span></div>` : ''}
+                    ${obj.Owner ? `<div class="card-row"><span class="card-label">Владелец:</span><span class="card-value"><code class=\"badge-guid\">${escapeHtml(obj.Owner)}</code></span></div>` : ''}
+                `;
+                objectsCards.appendChild(card);
+            }
+        });
+        // UX6: подключаем обработчики чекбоксов
+        document.querySelectorAll('.row-checkbox').forEach(cb => {
+            cb.addEventListener('change', function() {
+                const idx = parseInt(this.dataset.index);
+                if (this.checked) selectedIndices.add(idx);
+                else selectedIndices.delete(idx);
+                this.closest('tr').classList.toggle('row-selected', this.checked);
+                updateBulkToolbar();
+            });
+        });
+        // UX7: inline edit при клике на GUID бейдж (не для заменённых)
+        document.querySelectorAll('.guid-badge-clickable').forEach(badge => {
+            badge.style.cursor = 'pointer';
+            badge.addEventListener('click', function() {
+                // Находим объект по Ref тексту бейджа
+                const guidText = this.textContent.trim();
+                const obj = currentObjects.find(o => o.Ref === guidText);
+                if (obj) startInlineEdit(this, obj);
+            });
         });
         document.querySelectorAll('.replace-btn').forEach(btn => {
             btn.addEventListener('click', function() {
@@ -769,25 +1236,33 @@
                     showToast('У объекта нет GUID для замены.', 'error');
                     return;
                 }
-                const newGuid = prompt('Введите новый GUID:', oldGuid);
-                if (newGuid && newGuid !== oldGuid) {
-                    const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-                    if (!guidRegex.test(newGuid)) {
-                        // S3.12: showToast вместо alert()
-                        showToast('Неверный формат GUID. Ожидается: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', 'error');
-                        return;
+                // UX7: используем inline edit вместо prompt — находим бейдж в строке
+                const row = this.closest('tr');
+                const guidBadge = row.querySelector('.badge-guid');
+                if (guidBadge) {
+                    startInlineEdit(guidBadge, obj);
+                } else {
+                    // Fallback: prompt
+                    const newGuid = prompt('Введите новый GUID:', oldGuid);
+                    if (newGuid && newGuid !== oldGuid) {
+                        const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                        if (!guidRegex.test(newGuid)) {
+                            showToast('Неверный формат GUID. Ожидается: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', 'error');
+                            return;
+                        }
+                        snapshotState();
+                        replacementLog.push({
+                            type: obj._type || '',
+                            description: obj.Description || '',
+                            oldGuid: oldGuid,
+                            newGuid: newGuid,
+                            isFolder: obj.IsFolder || false
+                        });
+                        obj.Ref = newGuid;
+                        replacedGuids.add(newGuid);
+                        renderTable(currentObjects);
+                        showStatus('<i class="fas fa-info-circle"></i> GUID заменён в памяти. Для сохранения нажмите "Скачать XML".', 'info');
                     }
-                    replacementLog.push({
-                        type: obj._type || '',
-                        description: obj.Description || '',
-                        oldGuid: oldGuid,
-                        newGuid: newGuid,
-                        isFolder: obj.IsFolder || false
-                    });
-                    obj.Ref = newGuid;
-                    replacedGuids.add(newGuid);
-                    renderTable(currentObjects);
-                    showStatus('<i class="fas fa-info-circle"></i> GUID заменён в памяти. Для сохранения нажмите "Скачать XML".', 'info');
                 }
             });
         });
@@ -869,6 +1344,8 @@
                 showStatus('Ошибка: ' + data.error, 'error');
                 return;
             }
+            // UX1: сохраняем snapshot для undo перед заменой
+            if (typeof snapshotState === 'function') snapshotState();
             currentObjects = data.objects || [];
             const replaced = data.total_replaced || 0;
             const stats = data.stats || {};
@@ -1192,6 +1669,846 @@
     // S3.15: убран финальный console.log из production
     // Инициализация пустого состояния и регистрация service worker (опционально)
     // может быть добавлена здесь, если потребуется.
+
+    // ====================================================
+    // UX1: Undo/Redo stack для currentObjects
+    // ====================================================
+    let undoStack = [];
+    let redoStack = [];
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+
+    function snapshotState() {
+        // Глубокая копия currentObjects перед модификацией
+        undoStack.push(JSON.parse(JSON.stringify(currentObjects)));
+        if (undoStack.length > 50) undoStack.shift(); // ограничение размера
+        redoStack = [];
+        updateUndoRedoButtons();
+    }
+    function updateUndoRedoButtons() {
+        undoBtn.disabled = undoStack.length === 0;
+        redoBtn.disabled = redoStack.length === 0;
+    }
+    function undo() {
+        if (undoStack.length === 0) return;
+        redoStack.push(JSON.parse(JSON.stringify(currentObjects)));
+        currentObjects = undoStack.pop();
+        // Пересобираем replacedGuids по replacementLog
+        replacedGuids = new Set(replacementLog.map(r => r.newGuid));
+        renderTable(currentObjects);
+        updateUndoRedoButtons();
+        auditLog('undo', 'Отменено действие');
+    }
+    function redo() {
+        if (redoStack.length === 0) return;
+        undoStack.push(JSON.parse(JSON.stringify(currentObjects)));
+        currentObjects = redoStack.pop();
+        renderTable(currentObjects);
+        updateUndoRedoButtons();
+        auditLog('redo', 'Возвращено действие');
+    }
+    undoBtn.addEventListener('click', undo);
+    redoBtn.addEventListener('click', redo);
+
+    // Глобальные хоткеи
+    document.addEventListener('keydown', function(e) {
+        // Ctrl/Cmd+Z — undo, Ctrl/Cmd+Shift+Z — redo
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+            if (e.shiftKey) { e.preventDefault(); redo(); }
+            else { e.preventDefault(); undo(); }
+        }
+        // Ctrl/Cmd+K — command palette
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            openCommandPalette();
+        }
+        // Esc — закрыть модальные окна
+        if (e.key === 'Escape') {
+            closeModal();
+            closeCommandPalette();
+            closeAuditLog();
+        }
+    });
+
+    // ====================================================
+    // UX2: Diff view «было/стало» в строке с заменённым GUID
+    // ====================================================
+    function getOldGuidForCurrent(newGuid) {
+        // Ищем в replacementLog старый GUID, соответствующий новому
+        for (const r of replacementLog) {
+            if (r.newGuid === newGuid) return r.oldGuid;
+        }
+        return null;
+    }
+
+    // ====================================================
+    // UX3: Pre-upload валидация файла
+    // ====================================================
+    const fileMeta = document.getElementById('fileMeta');
+    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 МБ
+
+    fileInput.addEventListener('change', function() {
+        const file = fileInput.files[0];
+        if (!file) {
+            fileMeta.style.display = 'none';
+            return;
+        }
+        const sizeKB = (file.size / 1024).toFixed(0);
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+        const sizeStr = file.size > 1024 * 1024 ? `${sizeMB} МБ` : `${sizeKB} КБ`;
+        const isXml = file.name.toLowerCase().endsWith('.xml');
+        const tooBig = file.size > MAX_FILE_SIZE;
+        const wrongExt = !isXml;
+
+        let html = ` · ${escapeHtml(file.name)} · ${sizeStr}`;
+        if (tooBig) html += ` · <span class="size-too-big">превышен лимит 100 МБ</span>`;
+        if (wrongExt) html += ` · <span class="size-too-big">разрешены только .xml</span>`;
+        fileMeta.innerHTML = html;
+        fileMeta.style.display = 'inline';
+        // Блокируем upload если файл не валиден
+        uploadBtn.disabled = tooBig || wrongExt;
+    });
+
+    // ====================================================
+    // UX4: Модальное окно подтверждения (Promise-based)
+    // ====================================================
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalMessage = document.getElementById('modalMessage');
+    const modalConfirm = document.getElementById('modalConfirm');
+    const modalCancel = document.getElementById('modalCancel');
+    let modalResolve = null;
+
+    function showConfirm(title, message, confirmText = 'Подтвердить', confirmClass = 'btn-warning') {
+        return new Promise((resolve) => {
+            modalResolve = resolve;
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modalConfirm.textContent = confirmText;
+            modalConfirm.className = 'btn ' + confirmClass;
+            modalBackdrop.classList.add('active');
+            modalConfirm.focus();
+        });
+    }
+    function closeModal() {
+        modalBackdrop.classList.remove('active');
+        if (modalResolve) {
+            modalResolve(false);
+            modalResolve = null;
+        }
+    }
+    modalConfirm.addEventListener('click', function() {
+        modalBackdrop.classList.remove('active');
+        if (modalResolve) {
+            modalResolve(true);
+            modalResolve = null;
+        }
+    });
+    modalCancel.addEventListener('click', closeModal);
+    modalBackdrop.addEventListener('click', function(e) {
+        if (e.target === modalBackdrop) closeModal();
+    });
+
+    // ====================================================
+    // UX5: Skeleton loader для таблицы Базы GUID
+    // ====================================================
+    function showSkeletonRows(tbody, cols, rows = 8) {
+        let html = '';
+        for (let i = 0; i < rows; i++) {
+            html += '<tr class="skeleton-row">';
+            for (let j = 0; j < cols; j++) {
+                html += '<td><span class="skeleton-block ' + (j === 0 ? 'short' : (j === 1 ? 'medium' : '')) + '"></span></td>';
+            }
+            html += '</tr>';
+        }
+        tbody.innerHTML = html;
+    }
+
+    // ====================================================
+    // UX6: Bulk edit mode — выбор строк через чекбоксы
+    // ====================================================
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const bulkToolbar = document.getElementById('bulkToolbar');
+    const bulkCount = document.getElementById('bulkCount');
+    const bulkReplaceBtn = document.getElementById('bulkReplaceBtn');
+    const bulkClearBtn = document.getElementById('bulkClearBtn');
+    let selectedIndices = new Set();
+
+    function updateBulkToolbar() {
+        bulkCount.textContent = `${selectedIndices.size} выбрано`;
+        bulkToolbar.classList.toggle('active', selectedIndices.size > 0);
+        selectAllCheckbox.checked = selectedIndices.size > 0 &&
+            // проверяем что все на странице выбраны
+            Array.from(document.querySelectorAll('.row-checkbox')).every(cb => cb.checked);
+    }
+    selectAllCheckbox.addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        checkboxes.forEach(cb => {
+            const idx = parseInt(cb.dataset.index);
+            if (cb.checked !== this.checked) {
+                cb.checked = this.checked;
+                if (this.checked) selectedIndices.add(idx);
+                else selectedIndices.delete(idx);
+                cb.closest('tr').classList.toggle('row-selected', this.checked);
+            }
+        });
+        updateBulkToolbar();
+    });
+    bulkClearBtn.addEventListener('click', function() {
+        selectedIndices.clear();
+        document.querySelectorAll('.row-checkbox').forEach(cb => {
+            cb.checked = false;
+            cb.closest('tr').classList.remove('row-selected');
+        });
+        selectAllCheckbox.checked = false;
+        updateBulkToolbar();
+    });
+    bulkReplaceBtn.addEventListener('click', async function() {
+        if (selectedIndices.size === 0) return;
+        const newGuid = prompt(`Введите новый GUID для ${selectedIndices.size} объектов:`, '');
+        if (!newGuid) return;
+        const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!guidRegex.test(newGuid)) {
+            showToast('Неверный формат GUID', 'error');
+            return;
+        }
+        snapshotState();
+        for (const idx of selectedIndices) {
+            const obj = currentObjects[idx];
+            if (!obj || !obj.Ref) continue;
+            const oldGuid = obj.Ref;
+            if (oldGuid === newGuid) continue;
+            replacementLog.push({
+                type: obj._type || '',
+                description: obj.Description || '',
+                oldGuid: oldGuid,
+                newGuid: newGuid,
+                isFolder: obj.IsFolder || false
+            });
+            obj.Ref = newGuid;
+            replacedGuids.add(newGuid);
+        }
+        auditLog('bulk-replace', `Заменено GUID для ${selectedIndices.size} объектов`);
+        selectedIndices.clear();
+        renderTable(currentObjects);
+        showStatus(`<i class="fas fa-check-circle"></i> Массовая замена: ${selectedIndices.size} объектов`, 'success');
+    });
+
+    // ====================================================
+    // UX7: Inline-редактирование GUID по клику
+    // ====================================================
+    function startInlineEdit(guidBadge, obj) {
+        const oldGuid = obj.Ref;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = oldGuid || '';
+        input.className = 'guid-input';
+        input.setAttribute('aria-label', 'Редактирование GUID');
+        input.pattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+        guidBadge.replaceWith(input);
+        input.focus();
+        input.select();
+
+        const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        function validate() {
+            const val = input.value.trim();
+            if (!val) {
+                input.classList.remove('valid', 'invalid');
+                return false;
+            }
+            if (guidRegex.test(val)) {
+                input.classList.add('valid');
+                input.classList.remove('invalid');
+                return true;
+            } else {
+                input.classList.add('invalid');
+                input.classList.remove('valid');
+                return false;
+            }
+        }
+        input.addEventListener('input', validate);
+
+        function commit() {
+            const newGuid = input.value.trim();
+            if (newGuid && newGuid !== oldGuid && guidRegex.test(newGuid)) {
+                snapshotState();
+                replacementLog.push({
+                    type: obj._type || '',
+                    description: obj.Description || '',
+                    oldGuid: oldGuid,
+                    newGuid: newGuid,
+                    isFolder: obj.IsFolder || false
+                });
+                obj.Ref = newGuid;
+                replacedGuids.add(newGuid);
+                renderTable(currentObjects);
+                auditLog('inline-edit', `GUID заменён: ${oldGuid?.slice(0,8)}... → ${newGuid.slice(0,8)}...`);
+            } else {
+                // откат — возвращаем бейдж
+                renderTable(currentObjects);
+            }
+        }
+        input.addEventListener('blur', commit);
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+            else if (e.key === 'Escape') { e.preventDefault(); input.value = oldGuid || ''; input.blur(); }
+        });
+    }
+
+    // ====================================================
+    // UX8: Сохранение состояния в localStorage
+    // ====================================================
+    const STORAGE_KEY = 'guid_replacer_state_v1';
+
+    function saveState() {
+        try {
+            const state = {
+                objects: currentObjects,
+                filename: currentFilename,
+                sessionId: sessionId,
+                replacedGuids: Array.from(replacedGuids),
+                replacementLog: replacementLog,
+                savedAt: Date.now()
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {
+            // localStorage может переполниться для больших XML
+            console.warn('Не удалось сохранить состояние:', e);
+        }
+    }
+    function loadState() {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) return null;
+            return JSON.parse(saved);
+        } catch (e) { return null; }
+    }
+    function restoreState(state) {
+        currentObjects = state.objects || [];
+        currentFilename = state.filename || '';
+        sessionId = state.sessionId || '';
+        replacedGuids = new Set(state.replacedGuids || []);
+        replacementLog = state.replacementLog || [];
+        resultArea.style.display = 'block';
+        if (emptyState) emptyState.style.display = 'none';
+        renderTable(currentObjects);
+        const age = Math.round((Date.now() - state.savedAt) / 60000);
+        showStatus(`<i class="fas fa-info-circle"></i> Восстановлена сессия (${age} мин назад, ${currentObjects.length} объектов).`, 'info');
+        auditLog('restore', `Сессия восстановлена: ${age} мин назад`);
+    }
+    function checkForSavedState() {
+        const state = loadState();
+        if (!state || !state.objects || state.objects.length === 0) return;
+        // Показываем баннер с предложением восстановиться
+        const banner = document.createElement('div');
+        banner.style.cssText = 'background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; padding:12px 16px; border-radius:8px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;';
+        banner.innerHTML = `<div><i class="fas fa-history"></i> Найдена незавершённая сессия: ${state.objects.length} объектов от «${escapeHtml(state.filename)}».</div>`;
+        const restoreBtn = document.createElement('button');
+        restoreBtn.className = 'btn btn-primary';
+        restoreBtn.textContent = 'Восстановить';
+        restoreBtn.addEventListener('click', function() {
+            restoreState(state);
+            banner.remove();
+        });
+        const dismissBtn = document.createElement('button');
+        dismissBtn.className = 'btn btn-outline';
+        dismissBtn.textContent = 'Отклонить';
+        dismissBtn.addEventListener('click', function() {
+            localStorage.removeItem(STORAGE_KEY);
+            banner.remove();
+        });
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display:flex; gap:8px;';
+        actions.appendChild(restoreBtn);
+        actions.appendChild(dismissBtn);
+        banner.appendChild(actions);
+        // Вставляем после uploadCard
+        uploadCard.parentNode.insertBefore(banner, uploadCard.nextSibling);
+    }
+    // Сохраняем состояние при unload
+    window.addEventListener('beforeunload', saveState);
+    // При загрузке страницы предлагаем восстановление
+    checkForSavedState();
+
+    // ====================================================
+    // UX9: Сортировка колонок таблицы объектов
+    // ====================================================
+    let sortColumn = null;
+    let sortDirection = null; // null | 'asc' | 'desc'
+
+    function sortObjects(objects, column, direction) {
+        if (!direction) return objects;
+        const sorted = [...objects];
+        sorted.sort((a, b) => {
+            let va, vb;
+            switch (column) {
+                case 'type': va = a._type || ''; vb = b._type || ''; break;
+                case 'ref': va = a.Ref || ''; vb = b.Ref || ''; break;
+                case 'description': va = a.Description || ''; vb = b.Description || ''; break;
+                case 'code': va = a.Code || ''; vb = b.Code || ''; break;
+                case 'isFolder': va = a.IsFolder ? 1 : 0; vb = b.IsFolder ? 1 : 0; break;
+                default: return 0;
+            }
+            va = String(va).toLowerCase();
+            vb = String(vb).toLowerCase();
+            if (va < vb) return direction === 'asc' ? -1 : 1;
+            if (va > vb) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        return sorted;
+    }
+    document.querySelectorAll('th.sortable').forEach(th => {
+        th.addEventListener('click', function() {
+            const column = this.dataset.sort;
+            if (sortColumn === column) {
+                // Цикл: asc → desc → null → asc...
+                sortDirection = sortDirection === 'asc' ? 'desc' : (sortDirection === 'desc' ? null : 'asc');
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            // Обновляем иконки
+            document.querySelectorAll('th.sortable').forEach(t => {
+                t.classList.remove('sorted-asc', 'sorted-desc');
+                t.querySelector('.sort-icon').className = 'fas fa-sort sort-icon';
+            });
+            if (sortDirection) {
+                this.classList.add('sorted-' + sortDirection);
+                this.querySelector('.sort-icon').className =
+                    'fas fa-sort-' + sortDirection + ' sort-icon';
+            }
+            const query = searchInput.value.toLowerCase().trim();
+            let filtered = currentObjects;
+            if (query) {
+                filtered = filtered.filter(obj =>
+                    (obj.Ref && obj.Ref.toLowerCase().includes(query)) ||
+                    (obj.Description && obj.Description.toLowerCase().includes(query)) ||
+                    (obj.Code && obj.Code.toLowerCase().includes(query)) ||
+                    (obj._type && obj._type.toLowerCase().includes(query))
+                );
+            }
+            const sorted = sortObjects(filtered, sortColumn, sortDirection);
+            renderTable(sorted);
+        });
+    });
+
+    // ====================================================
+    // UX14: Diff-viewer для всего XML
+    // ====================================================
+    const loadDiffBtn = document.getElementById('loadDiffBtn');
+    const diffContainer = document.getElementById('diffContainer');
+    const diffOriginal = document.getElementById('diffOriginal');
+    const diffModified = document.getElementById('diffModified');
+    const diffStats = document.getElementById('diffStats');
+
+    function renderDiff(original, modified) {
+        // Построчное сравнение: подсвечиваем изменившиеся строки.
+        const origLines = original.split('\n');
+        const modLines = modified.split('\n');
+        const maxLen = Math.max(origLines.length, modLines.length);
+        let origHtml = '';
+        let modHtml = '';
+        let changedCount = 0;
+        for (let i = 0; i < maxLen; i++) {
+            const o = origLines[i] || '';
+            const m = modLines[i] || '';
+            const lineNum = String(i + 1).padStart(4, ' ');
+            if (o !== m) {
+                origHtml += `<div class="diff-line changed-old"><span class="line-num">${lineNum}</span>${escapeHtml(o)}</div>`;
+                modHtml += `<div class="diff-line changed-new"><span class="line-num">${lineNum}</span>${escapeHtml(m)}</div>`;
+                changedCount++;
+            } else {
+                origHtml += `<div class="diff-line unchanged"><span class="line-num">${lineNum}</span>${escapeHtml(o)}</div>`;
+                modHtml += `<div class="diff-line unchanged"><span class="line-num">${lineNum}</span>${escapeHtml(m)}</div>`;
+            }
+        }
+        diffOriginal.innerHTML = origHtml;
+        diffModified.innerHTML = modHtml;
+        return changedCount;
+    }
+
+    function loadDiff() {
+        if (!currentObjects || currentObjects.length === 0) {
+            showToast('Сначала загрузите XML-файл', 'error');
+            return;
+        }
+        diffStats.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Генерация сравнения...';
+        diffContainer.style.display = 'none';
+        fetch('/api/diff', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ objects: currentObjects, session_id: sessionId })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                diffStats.innerHTML = `<span style="color:#b91c1c;">Ошибка: ${escapeHtml(data.error)}</span>`;
+                return;
+            }
+            const changed = renderDiff(data.original, data.modified);
+            diffStats.innerHTML = `<i class="fas fa-info-circle"></i> Замен GUID: <b>${data.total_changes}</b> · изменено строк: <b>${changed}</b> из ${data.total_lines}`;
+            diffContainer.style.display = 'flex';
+            auditLog('diff-view', `Просмотр diff: ${data.total_changes} замен, ${changed} изменённых строк`);
+        })
+        .catch(e => {
+            diffStats.innerHTML = `<span style="color:#b91c1c;">Ошибка: ${escapeHtml(e.message)}</span>`;
+        });
+    }
+    loadDiffBtn.addEventListener('click', loadDiff);
+    // Авто-загрузка при переключении на вкладку Сравнение
+    document.querySelector('.tab[data-tab="diff"]').addEventListener('click', function() {
+        // Небольшая задержка чтобы вкладка стала активной
+        setTimeout(loadDiff, 100);
+    });
+    // ====================================================
+    function downloadFile(filename, content, mime = 'text/plain') {
+        const blob = new Blob([content], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    function escapeCsvField(s) {
+        s = String(s ?? '');
+        if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+            return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+    }
+    document.getElementById('exportCsvBtn').addEventListener('click', function() {
+        if (replacementLog.length === 0) {
+            showToast('Нет замен для экспорта', 'error');
+            return;
+        }
+        const headers = ['timestamp', 'type', 'description', 'old_guid', 'new_guid', 'is_folder'];
+        const now = new Date().toISOString();
+        const lines = [headers.join(',')];
+        for (const r of replacementLog) {
+            lines.push([
+                now,
+                escapeCsvField(r.type),
+                escapeCsvField(r.description),
+                escapeCsvField(r.oldGuid),
+                escapeCsvField(r.newGuid),
+                r.isFolder ? '1' : '0'
+            ].join(','));
+        }
+        downloadFile('replacements_' + new Date().toISOString().slice(0, 10) + '.csv',
+                     '\ufeff' + lines.join('\n'), 'text/csv');
+        auditLog('export', `Экспортировано ${replacementLog.length} замен в CSV`);
+    });
+    document.getElementById('exportJsonBtn').addEventListener('click', function() {
+        if (replacementLog.length === 0) {
+            showToast('Нет замен для экспорта', 'error');
+            return;
+        }
+        const data = {
+            exported_at: new Date().toISOString(),
+            filename: currentFilename,
+            total: replacementLog.length,
+            replacements: replacementLog
+        };
+        downloadFile('replacements_' + new Date().toISOString().slice(0, 10) + '.json',
+                     JSON.stringify(data, null, 2), 'application/json');
+        auditLog('export', `Экспортировано ${replacementLog.length} замен в JSON`);
+    });
+
+    // ====================================================
+    // UX15: Тёмная тема — переключатель
+    // ====================================================
+    const themeToggle = document.getElementById('themeToggle');
+    function applyTheme(theme) {
+        if (theme === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+            themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+        }
+        localStorage.setItem('guid_replacer_theme', theme);
+    }
+    const savedTheme = localStorage.getItem('guid_replacer_theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    applyTheme(savedTheme);
+    themeToggle.addEventListener('click', function() {
+        const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        applyTheme(current === 'dark' ? 'light' : 'dark');
+    });
+
+    // ====================================================
+    // UX16: Audit log — журнал действий пользователя
+    // ====================================================
+    const auditLogToggle = document.getElementById('auditLogToggle');
+    const auditLogPanel = document.getElementById('auditLogPanel');
+    const auditLogEntries = document.getElementById('auditLogEntries');
+    const auditLogBadge = document.getElementById('auditLogBadge');
+    const auditLogClose = document.getElementById('auditLogClose');
+    let auditEntries = [];
+
+    function auditLog(action, message) {
+        const now = new Date();
+        const time = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        auditEntries.unshift({ time, action, message });
+        if (auditEntries.length > 100) auditEntries.pop();
+        renderAuditLog();
+    }
+    function renderAuditLog() {
+        if (auditEntries.length === 0) {
+            auditLogEntries.innerHTML = '<div style="padding:20px; text-align:center; color:#94a3b8;">Действий пока нет</div>';
+        } else {
+            auditLogEntries.innerHTML = auditEntries.map(e =>
+                `<div class="audit-log-entry">
+                    <span class="time">${escapeHtml(e.time)}</span>
+                    <span>${escapeHtml(e.message)}</span>
+                </div>`
+            ).join('');
+        }
+        auditLogBadge.textContent = auditEntries.length;
+    }
+    auditLogToggle.addEventListener('click', function() {
+        auditLogPanel.classList.toggle('active');
+    });
+    auditLogClose.addEventListener('click', closeAuditLog);
+    function closeAuditLog() {
+        auditLogPanel.classList.remove('active');
+    }
+
+    // ====================================================
+    // UX17: Command palette (Cmd+K) — глобальный поиск
+    // ====================================================
+    const cmdPaletteBackdrop = document.getElementById('cmdPaletteBackdrop');
+    const cmdPaletteInput = document.getElementById('cmdPaletteInput');
+    const cmdPaletteResults = document.getElementById('cmdPaletteResults');
+    let cmdSelectedIndex = 0;
+    let cmdCurrentResults = [];
+
+    function openCommandPalette() {
+        cmdPaletteBackdrop.classList.add('active');
+        cmdPaletteInput.value = '';
+        cmdPaletteResults.innerHTML = '<div class="empty">Введите запрос для поиска</div>';
+        setTimeout(() => cmdPaletteInput.focus(), 50);
+    }
+    function closeCommandPalette() {
+        cmdPaletteBackdrop.classList.remove('active');
+    }
+    function searchAllSources(query) {
+        if (!query || query.length < 2) return [];
+        const q = query.toLowerCase();
+        const results = [];
+        // 1. В currentObjects (XML)
+        for (const obj of currentObjects) {
+            if (results.length >= 20) break;
+            if ((obj.Ref && obj.Ref.toLowerCase().includes(q)) ||
+                (obj.Description && obj.Description.toLowerCase().includes(q)) ||
+                (obj.Code && obj.Code.toLowerCase().includes(q)) ||
+                (obj._type && obj._type.toLowerCase().includes(q))) {
+                results.push({
+                    label: `${obj.Description || obj.Code || obj._type || '—'} (${obj._type || 'объект'})`,
+                    source: 'Объекты из XML',
+                    action: () => {
+                        // Переключаемся на вкладку objects и подсветим через поиск
+                        document.querySelector('.tab[data-tab="objects"]').click();
+                        searchInput.value = q;
+                        applySearch();
+                    }
+                });
+            }
+        }
+        // 2. В replacementLog
+        for (const r of replacementLog) {
+            if (results.length >= 30) break;
+            if ((r.oldGuid && r.oldGuid.toLowerCase().includes(q)) ||
+                (r.newGuid && r.newGuid.toLowerCase().includes(q)) ||
+                (r.description && r.description.toLowerCase().includes(q))) {
+                results.push({
+                    label: `${r.description || '—'}: ${r.oldGuid?.slice(0,8)}... → ${r.newGuid?.slice(0,8)}...`,
+                    source: 'Замены GUID',
+                    action: () => {
+                        document.querySelector('.tab[data-tab="replacements"]').click();
+                        document.getElementById('replSearchInput').value = q;
+                        renderReplTable(replacementLog.filter(item =>
+                            (item.oldGuid && item.oldGuid.toLowerCase().includes(q)) ||
+                            (item.newGuid && item.newGuid.toLowerCase().includes(q)) ||
+                            (item.description && item.description.toLowerCase().includes(q))
+                        ));
+                    }
+                });
+            }
+        }
+        // 3. В guidData
+        for (const row of guidData) {
+            if (results.length >= 40) break;
+            if ((row.name && row.name.toLowerCase().includes(q)) ||
+                (row.guid && row.guid.toLowerCase().includes(q)) ||
+                (row.type && row.type.toLowerCase().includes(q))) {
+                results.push({
+                    label: `${row.name || '—'} (${row.type || '—'})`,
+                    source: 'База GUID (1С)',
+                    action: () => {
+                        document.querySelector('.tab[data-tab="guid_db"]').click();
+                        document.getElementById('guidSearchInput').value = q;
+                        loadGuidData();
+                    }
+                });
+            }
+        }
+        return results;
+    }
+    function renderCmdResults(results) {
+        cmdCurrentResults = results;
+        cmdSelectedIndex = 0;
+        if (results.length === 0) {
+            cmdPaletteResults.innerHTML = '<div class="empty">Ничего не найдено</div>';
+            return;
+        }
+        cmdPaletteResults.innerHTML = results.map((r, i) =>
+            `<div class="result-item ${i === 0 ? 'selected' : ''}" data-idx="${i}">
+                <span>${escapeHtml(r.label)}</span>
+                <span class="result-source">${escapeHtml(r.source)}</span>
+            </div>`
+        ).join('');
+        // Подключаем клики
+        cmdPaletteResults.querySelectorAll('.result-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const idx = parseInt(this.dataset.idx);
+                if (cmdCurrentResults[idx]) {
+                    cmdCurrentResults[idx].action();
+                    closeCommandPalette();
+                }
+            });
+        });
+    }
+    cmdPaletteInput.addEventListener('input', function() {
+        const results = searchAllSources(this.value.trim());
+        renderCmdResults(results);
+    });
+    cmdPaletteInput.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown' && cmdCurrentResults.length > 0) {
+            e.preventDefault();
+            cmdSelectedIndex = (cmdSelectedIndex + 1) % cmdCurrentResults.length;
+            updateCmdSelection();
+        } else if (e.key === 'ArrowUp' && cmdCurrentResults.length > 0) {
+            e.preventDefault();
+            cmdSelectedIndex = (cmdSelectedIndex - 1 + cmdCurrentResults.length) % cmdCurrentResults.length;
+            updateCmdSelection();
+        } else if (e.key === 'Enter' && cmdCurrentResults[cmdSelectedIndex]) {
+            e.preventDefault();
+            cmdCurrentResults[cmdSelectedIndex].action();
+            closeCommandPalette();
+        }
+    });
+    function updateCmdSelection() {
+        cmdPaletteResults.querySelectorAll('.result-item').forEach((item, i) => {
+            item.classList.toggle('selected', i === cmdSelectedIndex);
+        });
+    }
+    cmdPaletteBackdrop.addEventListener('click', function(e) {
+        if (e.target === cmdPaletteBackdrop) closeCommandPalette();
+    });
+
+    // Хук: добавляем вызов saveState() и auditLog() в ключевые места.
+    // Сохраняем состояние после каждой модификации currentObjects
+    const _originalRenderTable = renderTable;
+    renderTable = function(objects) {
+        _originalRenderTable(objects);
+        saveState();
+    };
+
+    // Audit лог для базовых действий
+    const _originalUploadFile = uploadFile;
+    uploadFile = function(file) {
+        auditLog('upload-start', `Загрузка файла: ${escapeHtml(file.name)}`);
+        return _originalUploadFile(file);
+    };
+
+    // Обновляем существующие обработчики: заменяем confirm() на showConfirm()
+    // (syncDbBtn уже использует confirm — заменяем на модальный)
+    const _originalSyncHandler = syncDbBtn.onclick;
+    syncDbBtn.onclick = null;
+    syncDbBtn.addEventListener('click', async function() {
+        if (!currentFilename) {
+            showToast('Сначала загрузите XML-файл.', 'error');
+            return;
+        }
+        const confirmed = await showConfirm(
+            'Синхронизация базы GUID',
+            'Текущая база GUID будет удалена и загружена заново из 1С. Это может занять несколько минут.',
+            'Синхронизировать',
+            'btn-warning'
+        );
+        if (!confirmed) return;
+        auditLog('sync-start', 'Запущена синхронизация с 1С');
+        startSync();
+    });
+
+    // Audit лог для автозамены
+    autoReplaceBtn.addEventListener('click', function() {
+        auditLog('auto-replace-start', 'Запущена автозамена GUID');
+    });
+
+    // Audit лог для скачивания
+    downloadBtn.addEventListener('click', function() {
+        auditLog('download-start', 'Скачивание модифицированного XML');
+    });
+
+    // Перехватываем uploadFile для audit
+    const _originalUploadFileFn = window.uploadFile;
+    if (typeof _originalUploadFileFn === 'function') {
+        window.uploadFile = function(file) {
+            return _originalUploadFileFn(file);
+        };
+    }
+
+    // Добавляем вызов skeleton loader в loadGuidData
+    const _originalLoadGuidData = loadGuidData;
+    loadGuidData = function() {
+        showSkeletonRows(document.getElementById('guidBody'), 5);
+        return _originalLoadGuidData();
+    };
+
+    // Инициализация audit log
+    renderAuditLog();
+    auditLog('session-start', 'Сессия начата');
 </script>
+
+<!-- UX4: Модальное окно для подтверждений (вместо window.confirm) -->
+<div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal">
+        <h3 id="modalTitle">Подтверждение</h3>
+        <p id="modalMessage">Вы уверены?</p>
+        <div class="modal-actions">
+            <button class="btn btn-outline" id="modalCancel">Отмена</button>
+            <button class="btn btn-warning" id="modalConfirm">Подтвердить</button>
+        </div>
+    </div>
+</div>
+
+<!-- UX16: Audit log panel -->
+<button id="auditLogToggle" class="audit-log-toggle" title="История действий" aria-label="История действий">
+    <i class="fas fa-history"></i>
+    <span>История</span>
+    <span id="auditLogBadge" style="background:#3b82f6; color:white; border-radius:10px; padding:0 6px; font-size:11px;">0</span>
+</button>
+<div class="audit-log-panel" id="auditLogPanel" role="region" aria-label="История действий">
+    <div class="header">
+        <span>История действий</span>
+        <button class="btn-icon" id="auditLogClose" aria-label="Закрыть"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="entries" id="auditLogEntries">
+        <div style="padding:20px; text-align:center; color:#94a3b8;">Действий пока нет</div>
+    </div>
+</div>
+
+<!-- UX17: Command palette (Cmd+K) -->
+<div class="cmd-palette-backdrop" id="cmdPaletteBackdrop" role="dialog" aria-modal="true" aria-label="Глобальный поиск">
+    <div class="cmd-palette">
+        <input type="text" id="cmdPaletteInput" placeholder="Поиск объектов, GUID, описаний во всех вкладках..." aria-label="Поиск">
+        <div class="results" id="cmdPaletteResults">
+            <div class="empty">Введите запрос для поиска</div>
+        </div>
+    </div>
+</div>
 </body>
 </html>

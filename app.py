@@ -181,7 +181,14 @@ def upload_file():
                     }
                 logger.info(f"Загрузка файла: session={session_id}, файл={original_filename}, объектов={len(objects)}")
                 cleanup_sessions()
-                return jsonify({'objects': objects, 'filename': original_filename, 'session_id': session_id})
+                # UX12: для больших XML фронт делает repeat-запросы постранично,
+                # но мы отдаём всё сразу — фронт сам кэширует и пагинирует локально.
+                return jsonify({
+                    'objects': objects,
+                    'filename': original_filename,
+                    'session_id': session_id,
+                    'total': len(objects),
+                })
             except ET.XMLSyntaxError as e:
                 logger.error(f"Ошибка парсинга XML: {e}")
                 return jsonify({'error': f'Ошибка парсинга XML: {str(e)}'}), 400
@@ -392,6 +399,8 @@ def sync_db_stream(xml_path):
     worker_thread.start()
 
     total_types = 0
+    processed = 0
+    sync_start_time = None
     last_heartbeat = time.time()
 
     try:
@@ -421,6 +430,7 @@ def sync_db_stream(xml_path):
             if line.startswith('ВСЕГО_ТИПОВ:'):
                 try:
                     total_types = int(line.split(':', 1)[1].strip())
+                    sync_start_time = time.time()
                     yield f"data: {json.dumps({'type': 'total', 'total_types': total_types})}\n\n"
                 except ValueError:
                     pass
@@ -430,7 +440,22 @@ def sync_db_stream(xml_path):
                 parts = line.split('Обрабатывается:')
                 if len(parts) > 1:
                     table = parts[1].strip()
-                    yield f"data: {json.dumps({'type': 'progress', 'table': table, 'total_types': total_types, 'message': line})}\n\n"
+                    # UX13: считаем ETA для прогресса
+                    processed += 1
+                    elapsed = time.time() - sync_start_time if sync_start_time else 0
+                    eta_seconds = 0
+                    if total_types > 0 and processed > 0:
+                        eta_seconds = max(0, int((elapsed / processed) * (total_types - processed)))
+                    progress_msg = json.dumps({
+                        'type': 'progress',
+                        'table': table,
+                        'total_types': total_types,
+                        'processed_types': processed,
+                        'eta_seconds': eta_seconds,
+                        'elapsed_seconds': int(elapsed),
+                        'message': line
+                    })
+                    yield f"data: {progress_msg}\n\n"
             elif 'Получено' in line or 'Не удалось получить данные' in line:
                 yield f"data: {json.dumps({'type': 'result', 'message': line})}\n\n"
             else:
@@ -465,6 +490,74 @@ def sync_stream():
             'X-Accel-Buffering': 'no',  # отключает буферизацию в nginx
         }
     )
+
+
+@app.route('/api/diff', methods=['POST'])
+def diff_xml():
+    """UX14: возвращает исходный и модифицированный XML для diff-view.
+
+    Используется вкладкой «Сравнение» для отображения было/стало.
+    Возвращает JSON: {original: str, modified: str, total_changes: int}
+    """
+    try:
+        data = request.get_json()
+        if not data or 'objects' not in data:
+            return jsonify({'error': 'No objects provided'}), 400
+        session_id = data.get('session_id')
+        with _sessions_lock:
+            session_data = _sessions.get(session_id)
+            if not session_data:
+                return jsonify({'error': 'Сессия не найдена. Загрузите файл заново.'}), 400
+            original_path = session_data['xml_path']
+        if not original_path or not os.path.exists(original_path):
+            return jsonify({'error': 'Original XML file not found'}), 400
+        try:
+            # Читаем исходный XML
+            with open(original_path, 'rb') as f:
+                orig_bytes = f.read()
+            # Декодируем, удаляя BOM если есть
+            if orig_bytes.startswith(b'\xef\xbb\xbf'):
+                orig_bytes = orig_bytes[3:]
+            orig_text = orig_bytes.decode('utf-8', errors='replace')
+
+            # Считаем замены
+            orig_objects, _ = parse_xml(original_path)
+            replacements = get_replacement_map(orig_objects, data['objects'])
+            if not replacements:
+                return jsonify({
+                    'original': orig_text,
+                    'modified': orig_text,
+                    'total_changes': 0
+                })
+
+            # Генерируем модифицированный текст, заменяя только в ссылочных элементах.
+            # Используем tree-based подход через replace_guids_in_xml + чтение результата.
+            modified_path = replace_guids_in_xml(original_path, replacements)
+            _track_temp_file(modified_path)
+            with open(modified_path, 'rb') as f:
+                mod_bytes = f.read()
+            if mod_bytes.startswith(b'\xef\xbb\xbf'):
+                mod_bytes = mod_bytes[3:]
+            mod_text = mod_bytes.decode('utf-8', errors='replace')
+
+            # Текстовая статистика
+            orig_lines = orig_text.splitlines()
+            mod_lines = mod_text.splitlines()
+            changed_lines = sum(1 for a, b in zip(orig_lines, mod_lines) if a != b)
+
+            return jsonify({
+                'original': orig_text,
+                'modified': mod_text,
+                'total_changes': len(replacements),
+                'changed_lines': changed_lines,
+                'total_lines': len(orig_lines)
+            })
+        except Exception as e:
+            logger.error(f"Ошибка при diff: {e}")
+            return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Необработанная ошибка в diff: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/guid_types')
