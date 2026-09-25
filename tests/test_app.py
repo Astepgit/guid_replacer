@@ -284,6 +284,55 @@ class TestSyncStreamRoute:
         assert b'error' in r.data
 
 
+class TestDiffRoute:
+    """UX14: /api/diff endpoint для XML diff-viewer."""
+
+    def _setup_session(self, client, populated_db):
+        """Загружает XML и возвращает (session_id, objects)."""
+        xml = make_xml([
+            '<v8:CatalogObject.Номенклатура>'
+            '<v8:Ref>oldguid-diff-0000-0000-000000000001</v8:Ref>'
+            '<v8:Description>Товар А</v8:Description>'
+            '<v8:IsFolder>false</v8:IsFolder>'
+            '</v8:CatalogObject.Номенклатура>'
+        ])
+        r = client.post('/upload',
+                        data={'file': (io.BytesIO(xml), 'test.xml')},
+                        content_type='multipart/form-data')
+        j = r.get_json()
+        return j['session_id'], j['objects']
+
+    def test_diff_no_session(self, app_client):
+        r = app_client.post('/api/diff', json={'objects': [], 'session_id': 'invalid'})
+        assert r.status_code == 400
+
+    def test_diff_no_changes(self, app_client, populated_db):
+        """Если нет замен — diff показывает одинаковый текст."""
+        sid, objects = self._setup_session(app_client, populated_db)
+        r = app_client.post('/api/diff', json={'objects': objects, 'session_id': sid})
+        j = r.get_json()
+        assert j['total_changes'] == 0
+        assert j['original'] == j['modified']
+
+    def test_diff_with_replacement(self, app_client, populated_db):
+        """Полный цикл: upload → auto_replace → diff показывает изменения."""
+        sid, objects = self._setup_session(app_client, populated_db)
+        # Auto-replace
+        r = app_client.post('/api/auto_replace',
+                           json={'objects': objects, 'session_id': sid})
+        modified = r.get_json()['objects']
+        # Diff
+        r = app_client.post('/api/diff',
+                           json={'objects': modified, 'session_id': sid})
+        j = r.get_json()
+        assert j['total_changes'] == 1
+        assert 'newguid-aaaa' in j['modified']
+        assert 'newguid-aaaa' not in j['original']
+        assert 'oldguid-diff' in j['original']
+        assert j['changed_lines'] > 0
+        assert j['total_lines'] > 0
+
+
 class TestGuidTypesRoute:
     def test_empty_db(self, app_client):
         r = app_client.get('/api/guid_types')
